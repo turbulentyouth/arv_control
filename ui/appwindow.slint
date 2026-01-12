@@ -1,0 +1,287 @@
+import { Button, VerticalBox, HorizontalBox } from "std-widgets.slint";
+
+component IconTextButton inherits Rectangle {
+    in property <string> text;
+    in property <image> icon;
+    in property <bool> active: false;
+    
+    width: 70px;
+    height: 70px;
+    background: #2b3b4b; // Dark bluish-gray
+    border-radius: 12px;
+
+    VerticalLayout {
+        alignment: center;
+        spacing: 5px;
+        Image {
+            source: root.icon;
+            width: 24px;
+            height: 24px;
+            horizontal-alignment: center;
+        }
+        Text {
+            text: root.text;
+            color: white;
+            font-size: 12px;
+            horizontal-alignment: center;
+        }
+    }
+}
+
+component StatusItem inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> value;
+    spacing: 5px;
+    Text {
+        text: root.label;
+        color: #aaaaaa;
+        font-size: 12px;
+        vertical-alignment: center;
+    }
+    Text {
+        text: root.value;
+        color: white;
+        font-size: 12px;
+        vertical-alignment: center;
+        font-weight: 700;
+    }
+}
+
+export component AppWindow inherits Window {
+    title: "ARVControl - 上海交通大学";
+    preferred-width: 1280px;
+    preferred-height: 720px;
+    background: #121212;
+
+    GridLayout {
+        padding: 0px;
+        spacing: 0px;
+        
+        // Top Heading Ruler
+        Rectangle {
+            row: 0;
+            col: 0;
+            height: 60px;
+            background: #000000;
+            
+            // Ruler Ticks
+            HorizontalLayout {
+                padding-left: 0px;
+                alignment: center;
+                spacing: 0px;
+                
+                for i in 13 : Rectangle {
+                    width: 80px;
+                    height: parent.height;
+                    
+                    Rectangle {
+                        y: 0;
+                        width: 2px;
+                        height: 15px;
+                        background: white;
+                        x: (parent.width - self.width) / 2;
+                    }
+                    
+                    Text {
+                        y: 20px;
+                        text: i * 10;
+                        color: white;
+                        font-size: 14px;
+                        horizontal-alignment: center;
+                    }
+                    
+                    // Small ticks
+                    for j in 4 : Rectangle {
+                         y: 0;
+                         height: 8px;
+                         width: 1px;
+                         background: #888888;
+                         // Approximate positioning for small ticks
+                         x: (parent.width / 5) * (j + 1);
+                    }
+                }
+            }
+            
+            // Center Indicator (Red Triangle/Line)
+            Rectangle {
+                x: (parent.width - self.width) / 2;
+                y: 0;
+                width: 2px;
+                height: 30px;
+                background: #ff3333;
+            }
+            Text {
+                x: (parent.width - self.width) / 2;
+                y: 35px;
+                text: "0.0";
+                color: #ff3333;
+                font-size: 14px;
+            }
+        }
+
+        // Main Viewport Area
+        Rectangle {
+            row: 1;
+            col: 0;
+            background: #1e1e1e; // Main Camera Placeholder
+            
+            // Center Logo
+            VerticalLayout {
+                alignment: center;
+                spacing: 10px;
+                
+                // Stylized Logo (Text representation)
+                Text {
+                    text: "< X >"; 
+                    font-size: 80px;
+                    color: #444444;
+                    horizontal-alignment: center;
+                    font-weight: 900;
+                }
+                Text {
+                    text: "华中科技大学";
+                    font-size: 32px;
+                    color: #888888;
+                    horizontal-alignment: center;
+                    font-weight: 700;
+                }
+            }
+
+            // Left Sidebar Controls
+            VerticalLayout {
+                x: 20px;
+                y: (parent.height - self.height) / 2;
+                spacing: 15px;
+                
+                IconTextButton {
+                    text: "任务规划";
+                    // icon: @image-url("icons/task.svg");
+                }
+                IconTextButton {
+                    text: "设置";
+                    // icon: @image-url("icons/settings.svg");
+                }
+            }
+
+            // Right Sidebar Controls
+            VerticalLayout {
+                x: parent.width - 90px;
+                y: (parent.height - self.height) / 2;
+                spacing: 20px;
+                alignment: center;
+                
+                Rectangle {
+                    width: 50px;
+                    height: 50px;
+                    background: #2b3b4b;
+                    border-radius: 25px;
+                    Text { text: "Rec"; color: white; horizontal-alignment: center; vertical-alignment: center; font-size: 10px; }
+                }
+                Rectangle {
+                    width: 50px;
+                    height: 50px;
+                    background: #2b3b4b;
+                    border-radius: 25px;
+                    Text { text: "Snap"; color: white; horizontal-alignment: center; vertical-alignment: center; font-size: 10px; }
+                }
+                Rectangle {
+                    width: 50px;
+                    height: 50px;
+                    background: #2b3b4b;
+                    border-radius: 25px;
+                    Text { text: "Set"; color: white; horizontal-alignment: center; vertical-alignment: center; font-size: 10px; }
+                }
+            }
+
+            // Bottom-Left: 2D Trajectory Map
+            Rectangle {
+                x: 20px;
+                y: parent.height - self.height - 20px;
+                width: 200px;
+                height: 150px;
+                background: #000000;
+                border-color: #444444;
+                border-width: 1px;
+                
+                Text {
+                    x: 5px; y: 5px;
+                    text: "2D 轨迹";
+                    font-size: 12px;
+                    color: #aaaaaa;
+                }
+                
+                // Mock Trajectory
+                Path {
+                    width: 100%;
+                    height: 100%;
+                    stroke: #00ff00;
+                    stroke-width: 2px;
+                    MoveTo { x: 50; y: 100; }
+                    LineTo { x: 80; y: 80; }
+                    LineTo { x: 120; y: 90; }
+                    LineTo { x: 150; y: 50; }
+                }
+                
+                // Current Position Marker
+                Rectangle {
+                    x: 148px; y: 48px;
+                    width: 4px; height: 4px;
+                    background: red;
+                    border-radius: 2px;
+                }
+            }
+
+            // Bottom-Right: Secondary Video
+            Rectangle {
+                x: parent.width - self.width - 20px;
+                y: parent.height - self.height - 20px;
+                width: 240px;
+                height: 135px;
+                background: #000000;
+                border-color: #444444;
+                border-width: 1px;
+                
+                // Corner bracket
+                Path {
+                    stroke: white;
+                    stroke-width: 1px;
+                    MoveTo { x: 10; y: 20; }
+                    LineTo { x: 10; y: 10; }
+                    LineTo { x: 20; y: 10; }
+                }
+
+                Text {
+                    text: "等待副相机视频...";
+                    color: white;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    font-size: 12px;
+                }
+            }
+        }
+
+        // Bottom Status Bar
+        Rectangle {
+            row: 2;
+            col: 0;
+            height: 40px;
+            background: #2b3b4b;
+            
+            HorizontalLayout {
+                padding-left: 20px;
+                padding-right: 20px;
+                spacing: 20px;
+                
+                StatusItem { label: "油门:"; value: "N/A"; }
+                StatusItem { label: "深度:"; value: "N/A"; }
+                StatusItem { label: "俯仰角:"; value: "N/A"; }
+                StatusItem { label: "滚转角:"; value: "N/A"; }
+                
+                Rectangle { width: 20px; } // Spacer
+                
+                StatusItem { label: "操作模式:"; value: "---"; }
+                StatusItem { label: "电池:"; value: "---"; }
+            }
+        }
+    }
+}
