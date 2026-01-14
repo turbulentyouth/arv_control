@@ -1,0 +1,58 @@
+export component TopRuler inherits Rectangle {
+    height: 60px;
+    background: #000000;
+    
+    // Ruler Ticks
+    HorizontalLayout {
+        padding-left: 0px;
+        alignment: center;
+        spacing: 0px;
+        
+        for i in 13 : Rectangle {
+            width: 80px;
+            height: parent.height;
+            
+            Rectangle {
+                y: 0;
+                width: 2px;
+                height: 15px;
+                background: white;
+                x: (parent.width - self.width) / 2;
+            }
+            
+            Text {
+                y: 20px;
+                text: i * 10;
+                color: white;
+                font-size: 14px;
+                horizontal-alignment: center;
+            }
+            
+            // Small ticks
+            for j in 4 : Rectangle {
+                    y: 0;
+                    height: 8px;
+                    width: 1px;
+                    background: #888888;
+                    // Approximate positioning for small ticks
+                    x: (parent.width / 5) * (j + 1);
+            }
+        }
+    }
+    
+    // Center Indicator (Red Triangle/Line)
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: 0;
+        width: 2px;
+        height: 30px;
+        background: #ff3333;
+    }
+    Text {
+        x: (parent.width - self.width) / 2;
+        y: 35px;
+        text: "0.0";
+        color: #ff3333;
+        font-size: 14px;
+    }
+}

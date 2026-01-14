@@ -1,0 +1,18 @@
+export component StatusItem inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> value;
+    spacing: 5px;
+    Text {
+        text: root.label;
+        color: #aaaaaa;
+        font-size: 12px;
+        vertical-alignment: center;
+    }
+    Text {
+        text: root.value;
+        color: white;
+        font-size: 12px;
+        vertical-alignment: center;
+        font-weight: 700;
+    }
+}

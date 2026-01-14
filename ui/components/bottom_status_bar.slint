@@ -1,0 +1,23 @@
+import { StatusItem } from "./status_item.slint";
+
+export component BottomStatusBar inherits Rectangle {
+    height: 40px;
+    background: #2b3b4b;
+    
+    HorizontalLayout {
+        padding-left: 20px;
+        padding-right: 20px;
+        spacing: 20px;
+        
+        StatusItem { label: "油门:"; value: "N/A"; }
+        StatusItem { label: "深度:"; value: "N/A"; }
+        StatusItem { label: "俯仰角:"; value: "N/A"; }
+        StatusItem { label: "滚转角:"; value: "N/A"; }
+        
+        Rectangle { width: 20px; } // Spacer
+
+        StatusItem { label: "手柄:"; value: "---"; }
+        StatusItem { label: "模式:"; value: "---"; }
+        StatusItem { label: "电池:"; value: "---"; }
+    }
+}

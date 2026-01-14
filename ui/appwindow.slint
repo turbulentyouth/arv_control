@@ -1,69 +1,8 @@
 import { Button, VerticalBox, HorizontalBox } from "std-widgets.slint";
-
-component IconButton inherits Rectangle {
-    in property <string> text;
-    in property <image> icon;
-    callback clicked <=> touch.clicked;
-    out property <bool> has-hover <=> touch.has-hover;
-    
-    height: 54px; // Explicit height to prevent vertical stretching
-    border-radius: 8px;
-    background: touch.has-hover ? #ffffff20 : transparent;
-    animate background { duration: 200ms; }
-
-    HorizontalLayout {
-        x: 0;
-        y: (parent.height - self.preferred-height) / 2;
-        width: 100%;
-        spacing: 12px;
-        alignment: center; // Center content horizontally
-
-        // Circular background for the icon
-        Rectangle {
-            width: 44px;
-            height: 44px;
-            background: #3a4a59; 
-            border-radius: 22px;
-
-            Image {
-                source: root.icon;
-                width: 24px;
-                height: 24px;
-                x: (parent.width - self.width) / 2;
-                y: (parent.height - self.height) / 2;
-            }
-        }
-
-        Text {
-            text: root.text;
-            color: white;
-            font-size: 14px;
-            vertical-alignment: center;
-            y: (parent.height - self.height) / 2 - 5px; // Slight upward adjustment
-        }
-    }
-
-    touch := TouchArea {}
-}
-
-component StatusItem inherits HorizontalLayout {
-    in property <string> label;
-    in property <string> value;
-    spacing: 5px;
-    Text {
-        text: root.label;
-        color: #aaaaaa;
-        font-size: 12px;
-        vertical-alignment: center;
-    }
-    Text {
-        text: root.value;
-        color: white;
-        font-size: 12px;
-        vertical-alignment: center;
-        font-weight: 700;
-    }
-}
+import { TopRuler } from "./components/top_ruler.slint";
+import { LeftSidebar } from "./components/left_sidebar.slint";
+import { RightSidebar } from "./components/right_sidebar.slint";
+import { BottomStatusBar } from "./components/bottom_status_bar.slint";
 
 export component AppWindow inherits Window {
     title: "ARVControl - 上海交通大学";
@@ -76,65 +15,9 @@ export component AppWindow inherits Window {
         spacing: 0px;
         
         // Top Heading Ruler
-        Rectangle {
+        TopRuler {
             row: 0;
             col: 0;
-            height: 60px;
-            background: #000000;
-            
-            // Ruler Ticks
-            HorizontalLayout {
-                padding-left: 0px;
-                alignment: center;
-                spacing: 0px;
-                
-                for i in 13 : Rectangle {
-                    width: 80px;
-                    height: parent.height;
-                    
-                    Rectangle {
-                        y: 0;
-                        width: 2px;
-                        height: 15px;
-                        background: white;
-                        x: (parent.width - self.width) / 2;
-                    }
-                    
-                    Text {
-                        y: 20px;
-                        text: i * 10;
-                        color: white;
-                        font-size: 14px;
-                        horizontal-alignment: center;
-                    }
-                    
-                    // Small ticks
-                    for j in 4 : Rectangle {
-                         y: 0;
-                         height: 8px;
-                         width: 1px;
-                         background: #888888;
-                         // Approximate positioning for small ticks
-                         x: (parent.width / 5) * (j + 1);
-                    }
-                }
-            }
-            
-            // Center Indicator (Red Triangle/Line)
-            Rectangle {
-                x: (parent.width - self.width) / 2;
-                y: 0;
-                width: 2px;
-                height: 30px;
-                background: #ff3333;
-            }
-            Text {
-                x: (parent.width - self.width) / 2;
-                y: 35px;
-                text: "0.0";
-                color: #ff3333;
-                font-size: 14px;
-            }
         }
 
         // Main Viewport Area
@@ -166,94 +49,21 @@ export component AppWindow inherits Window {
             }
 
             // Left Sidebar Controls
-            Rectangle {
-                x: (side-touch.has-hover || task-btn.has-hover || setting-btn.has-hover) ? 20px : -110px;
+            LeftSidebar {
                 y: (parent.height - self.height) / 2;
-                width: 130px; 
-                height: left-layout.preferred-height; // Explicitly bind height to content
-                background: #2b3b4b; 
-                border-radius: 12px;
-
-                animate x { duration: 250ms; easing: ease-in-out; }
-
-                side-touch := TouchArea {
-                    x: -20px;
-                    width: parent.width + 40px;
-                    height: 100%;
-                }
-
-                left-layout := VerticalLayout {
-                    padding: 15px;
-                    spacing: 20px;
-                    alignment: start; // Do not stretch vertically
-                    
-                    task-btn := IconButton {
-                        text: "任务";
-                        icon: @image-url("icon/任务列表.png");
-                    }
-                    setting-btn := IconButton {
-                        text: "设置";
-                        icon: @image-url("icon/设置.png");
-                    }
-                }
             }
 
             // Right Sidebar Controls
-            VerticalLayout {
+            RightSidebar {
                 x: parent.width - 90px;
                 y: (parent.height - self.height) / 2;
-                spacing: 20px;
-                alignment: center;
-                
-                Rectangle {
-                    width: 50px;
-                    height: 50px;
-                    background: #2b3b4b;
-                    border-radius: 25px;
-                    Text { text: "Rec"; color: white; horizontal-alignment: center; vertical-alignment: center; font-size: 10px; }
-                }
-                Rectangle {
-                    width: 50px;
-                    height: 50px;
-                    background: #2b3b4b;
-                    border-radius: 25px;
-                    Text { text: "Snap"; color: white; horizontal-alignment: center; vertical-alignment: center; font-size: 10px; }
-                }
-                Rectangle {
-                    width: 50px;
-                    height: 50px;
-                    background: #2b3b4b;
-                    border-radius: 25px;
-                    Text { text: "Set"; color: white; horizontal-alignment: center; vertical-alignment: center; font-size: 10px; }
-                }
             }
-
-
         }
 
         // Bottom Status Bar
-        Rectangle {
+        BottomStatusBar {
             row: 2;
             col: 0;
-            height: 40px;
-            background: #2b3b4b;
-            
-            HorizontalLayout {
-                padding-left: 20px;
-                padding-right: 20px;
-                spacing: 20px;
-                
-                StatusItem { label: "油门:"; value: "N/A"; }
-                StatusItem { label: "深度:"; value: "N/A"; }
-                StatusItem { label: "俯仰角:"; value: "N/A"; }
-                StatusItem { label: "滚转角:"; value: "N/A"; }
-                
-                Rectangle { width: 20px; } // Spacer
-
-                StatusItem { label: "手柄:"; value: "---"; }
-                StatusItem { label: "模式:"; value: "---"; }
-                StatusItem { label: "电池:"; value: "---"; }
-            }
         }
     }
 }

@@ -1,0 +1,37 @@
+import { IconButton } from "./icon_button.slint";
+
+export component LeftSidebar inherits Rectangle {
+    // Left Sidebar Controls
+    width: 130px; 
+    height: left-layout.preferred-height; // Explicitly bind height to content
+    background: #2b3b4b; 
+    border-radius: 12px;
+
+    // Logic for hover expansion
+    property <bool> is-hovering: side-touch.has-hover || task-btn.has-hover || setting-btn.has-hover;
+    
+    animate x { duration: 250ms; easing: ease-in-out; }
+
+    x: is-hovering ? 20px : -110px;
+
+    side-touch := TouchArea {
+        x: -20px;
+        width: parent.width + 40px;
+        height: 100%;
+    }
+
+    left-layout := VerticalLayout {
+        padding: 15px;
+        spacing: 20px;
+        alignment: start; // Do not stretch vertically
+        
+        task-btn := IconButton {
+            text: "任务";
+            icon: @image-url("../icon/任务列表.png");
+        }
+        setting-btn := IconButton {
+            text: "设置";
+            icon: @image-url("../icon/设置.png");
+        }
+    }
+}

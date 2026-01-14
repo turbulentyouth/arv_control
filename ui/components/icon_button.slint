@@ -1,0 +1,46 @@
+export component IconButton inherits Rectangle {
+    in property <string> text;
+    in property <image> icon;
+    callback clicked <=> touch.clicked;
+    out property <bool> has-hover <=> touch.has-hover;
+    
+    height: 54px; // Explicit height to prevent vertical stretching
+    border-radius: 8px;
+    background: touch.has-hover ? #ffffff20 : transparent;
+    animate background { duration: 200ms; }
+
+    HorizontalLayout {
+        x: 0;
+        y: (parent.height - self.preferred-height) / 2;
+        width: 100%;
+        spacing: 12px;
+        alignment: start; // Align content to the left
+        padding-left: 1px; // Add slight padding from the left edge
+
+        // Circular background for the icon
+        Rectangle {
+            width: 44px;
+            height: 44px;
+            background: #3a4a59; 
+            border-radius: 22px;
+
+            Image {
+                source: root.icon;
+                width: 24px;
+                height: 24px;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+            }
+        }
+
+        Text {
+            text: root.text;
+            color: white;
+            font-size: 14px;
+            vertical-alignment: center;
+            y: (parent.height - self.height) / 2 - 5px; // Slight upward adjustment
+        }
+    }
+
+    touch := TouchArea {}
+}
