@@ -1,26 +1,307 @@
-export component RightSidebar inherits VerticalLayout {
-    spacing: 20px;
-    alignment: center;
+import { VerticalBox } from "std-widgets.slint";
+
+// 模式切换组件 (录像/拍照)
+component ModeSwitch inherits Rectangle {
+    in-out property <int> selected-mode: 0; // 0: Video, 1: Photo
+    callback mode-changed(int);
+    out property <bool> has-hover: area1.has-hover || area2.has-hover;
+
+    width: 120px;
+    height: 50px;
+    background: #333333;
+    border-radius: 25px;
+
+    // 滑块指示器
+    Rectangle {
+        x: root.selected-mode == 0 ? 5px : parent.width - self.width - 5px;
+        y: 5px;
+        width: 55px;
+        height: 40px;
+        border-radius: 20px;
+        background: #555555;
+        animate x { duration: 200ms; easing: ease-in-out; }
+    }
+
+    HorizontalLayout {
+        spacing: 0;
+        padding: 5px;
+        
+        // 录像模式区域
+        area1 := TouchArea {
+            width: 50%;
+            clicked => {
+                if (root.selected-mode != 0) {
+                    root.selected-mode = 0;
+                    root.mode-changed(0);
+                }
+            }
+            
+            Image {
+                source: @image-url("../icon/录像.png");
+                width: 24px;
+                height: 24px;
+                colorize: root.selected-mode == 0 ? #00ff00 : #ffffff; // 选中时绿色
+            }
+        }
+
+        // 拍照模式区域
+        area2 := TouchArea {
+            width: 50%;
+            clicked => {
+                if (root.selected-mode != 1) {
+                    root.selected-mode = 1;
+                    root.mode-changed(1);
+                }
+            }
+            
+            Image {
+                source: @image-url("../icon/拍照.png");
+                width: 24px;
+                height: 24px;
+                colorize: root.selected-mode == 1 ? #00ff00 : #ffffff;
+            }
+        }
+    }
+}
+
+// 快门按钮组件
+component ShutterButton inherits Rectangle {
+    callback clicked <=> touch.clicked;
+    in property <bool> active: false;
+    out property <bool> has-hover <=> touch.has-hover;
+
+    width: 70px;
+    height: 70px;
+    background: transparent;
+
+    // 外圈
+    Rectangle {
+        width: 100%;
+        height: 100%;
+        border-radius: 35px;
+        border-width: 4px;
+        border-color: white;
+        background: transparent;
+    }
+
+    // 内圆
+    Rectangle {
+        width: 56px;
+        height: 56px;
+        x: 7px;
+        y: 7px;
+        border-radius: 28px;
+        background: root.active ? #11eb19d3 : #cc0000; // 红色，点击变绿
+        animate background { duration: 100ms; }
+    }
+
+    touch := TouchArea {}
+}
+
+// 滑动开关组件 (带颜色状态区分)
+component Switch inherits Rectangle {
+    in property <string> text;
+    in-out property <bool> checked;
+    in property <bool> enabled: true;
+    callback toggled(bool);
+    out property <bool> has-hover <=> touch.has-hover;
+
+    width: 100px;
+    height: 40px;
+    background: transparent;
+    opacity: root.enabled ? 1.0 : 0.5;
+
+    HorizontalLayout {
+        spacing: 10px;
+        padding: 5px;
+        alignment: space-between;
+
+        Text {
+            text: root.text;
+            color: white;
+            font-size: 14px;
+            vertical-alignment: center;
+        }
+
+        // 开关轨道
+        Rectangle {
+            width: 50px;
+            height: 30px;
+            border-radius: 15px;
+            background: root.checked ? #00ff00 : #555555; // 开启绿，关闭灰
+            animate background { duration: 200ms; }
+            
+            // 开关圆钮
+            Rectangle {
+                x: root.checked ? parent.width - self.width - 2px : 2px;
+                y: 2px;
+                width: 26px;
+                height: 26px;
+                border-radius: 13px;
+                background: white;
+                animate x { duration: 200ms; easing: ease-in-out; }
+            }
+        }
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => {
+            root.checked = !root.checked;
+            root.toggled(root.checked);
+        }
+    }
+}
+
+// 中性滑动开关 (无明显开关颜色区分)
+component NeutralSwitch inherits Rectangle {
+    in property <string> text;
+    in-out property <bool> checked;
+    in property <bool> enabled: true;
+    callback toggled(bool);
+    out property <bool> has-hover <=> touch.has-hover;
+
+    width: 100px; 
+    height: 40px;
+    background: transparent;
+    opacity: root.enabled ? 1.0 : 0.5;
+
+    HorizontalLayout {
+        spacing: 10px;
+        padding: 5px;
+        alignment: space-between;
+
+        Text {
+            text: root.text;
+            color: white;
+            font-size: 14px;
+            vertical-alignment: center;
+        }
+
+        // 开关轨道
+        Rectangle {
+            width: 50px;
+            height: 30px;
+            border-radius: 15px;
+            background: #444444; // 始终保持中性灰
+            border-width: 1px;
+            border-color: #666666;
+            
+            // 开关圆钮
+            Rectangle {
+                x: root.checked ? parent.width - self.width - 2px : 2px;
+                y: 2px;
+                width: 26px;
+                height: 26px;
+                border-radius: 13px;
+                background: #dddddd; // 略微灰一点的白
+                animate x { duration: 200ms; easing: ease-in-out; }
+            }
+        }
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => {
+            root.checked = !root.checked;
+            root.toggled(root.checked);
+        }
+    }
+}
+
+export component RightSidebar inherits Rectangle {
+    // 基础样式
+    background: #2b3b4b;
+    border-radius: 12px;
     
-    Rectangle {
-        width: 50px;
-        height: 50px;
-        background: #2b3b4b;
-        border-radius: 25px;
-        Text { text: "Rec"; color: white; horizontal-alignment: center; vertical-alignment: center; font-size: 10px; }
+    // 尺寸设定
+    width: 160px;
+    height: layout.preferred-height;
+    
+    // 状态属性
+    property <int> camera-mode: 0; 
+    property <bool> sonar-enabled: false;
+    property <bool> dvl-enabled: false;
+    property <bool> sub-cam-enabled: false;
+    property <bool> swap-cam-enabled: false;
+
+    // 悬停逻辑
+    out property <bool> is-hovering: 
+        side-touch.has-hover || 
+        mode-switch.has-hover ||
+        shutter-btn.has-hover ||
+        sonar-sw.has-hover ||
+        dvl-sw.has-hover ||
+        sub-cam-sw.has-hover ||
+        swap-cam-sw.has-hover;
+
+    // 侧边感应区域 (扩展到组件左侧以检测鼠标接近)
+    side-touch := TouchArea {
+        x: -40px; // 向左延伸感应区
+        width: parent.width + 40px;
+        height: 100%;
     }
-    Rectangle {
-        width: 50px;
-        height: 50px;
-        background: #2b3b4b;
-        border-radius: 25px;
-        Text { text: "Snap"; color: white; horizontal-alignment: center; vertical-alignment: center; font-size: 10px; }
-    }
-    Rectangle {
-        width: 50px;
-        height: 50px;
-        background: #2b3b4b;
-        border-radius: 25px;
-        Text { text: "Set"; color: white; horizontal-alignment: center; vertical-alignment: center; font-size: 10px; }
+
+    layout := VerticalLayout {
+        padding-top: 20px;
+        padding-bottom: 20px;
+        spacing: 20px;
+        alignment: center; // 垂直居中
+        
+        // 1. 顶部控制组 (水平居中)
+        VerticalLayout {
+            spacing: 20px;
+            
+            // 模式切换开关
+            HorizontalLayout {
+                alignment: center;
+                mode-switch := ModeSwitch {
+                    selected-mode <=> root.camera-mode;
+                }
+            }
+
+            // 快门按钮
+            HorizontalLayout {
+                alignment: center;
+                shutter-btn := ShutterButton {
+                    clicked => {
+                        debug("Shutter clicked! Mode:", root.camera-mode);
+                    }
+                }
+            }
+        }
+
+        Rectangle { height: 10px; background: transparent; } 
+
+        // 2. 底部开关组 (整体右移)
+        VerticalLayout {
+            spacing: 20px;
+            padding-left: 30px; // 整体右移
+            
+            // 3. 声呐开关
+            sonar-sw := Switch {
+                text: "声呐";
+                checked <=> root.sonar-enabled;
+            }
+
+            // 4. DVL开关
+            dvl-sw := Switch {
+                text: "DVL";
+                checked <=> root.dvl-enabled;
+            }
+
+            // 5. 副摄像头开关
+            sub-cam-sw := Switch {
+                text: "副摄";
+                checked <=> root.sub-cam-enabled;
+            }
+
+            // 6. 相机切换按钮
+            swap-cam-sw := NeutralSwitch {
+                text: "切换"; 
+                enabled: root.sub-cam-enabled;
+                checked <=> root.swap-cam-enabled;
+            }
+        }
     }
 }

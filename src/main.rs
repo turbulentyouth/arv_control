@@ -7,7 +7,8 @@ fn main() -> Result<(), slint::PlatformError> {
     slint::invoke_from_event_loop(move || {
         let ui = weak_ui.unwrap();
         ui.window().set_maximized(true);
-    }).unwrap();
+    })
+    .unwrap();
 
     ui.run()
 }
