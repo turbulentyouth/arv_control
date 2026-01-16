@@ -25,6 +25,7 @@ export component AppWindow inherits Window {
 
     callback heading-updated(float);
     callback key-event(string, bool);
+    callback task-clicked;
 
     public function scroll-to-heading(target: float) {
         top-ruler.scroll-to-heading(target);
@@ -120,6 +121,7 @@ export component AppWindow inherits Window {
     // Left Sidebar Controls (Overlay)
     LeftSidebar {
         y: (parent.height - self.height) / 2;
+        task-clicked => { root.task-clicked(); }
     }
 
     // Right Sidebar Controls (Overlay)

@@ -2,6 +2,7 @@ import { IconButton } from "./icon_button.slint";
 
 export component LeftSidebar inherits Rectangle {
     // Left Sidebar Controls
+    callback task-clicked;
     width: 130px; 
     height: left-layout.preferred-height; // Explicitly bind height to content
     background: #2b3b4b; 
@@ -28,6 +29,7 @@ export component LeftSidebar inherits Rectangle {
         task-btn := IconButton {
             text: "任务";
             icon: @image-url("../icon/任务列表.png");
+            clicked => { root.task-clicked(); }
         }
         setting-btn := IconButton {
             text: "设置";
