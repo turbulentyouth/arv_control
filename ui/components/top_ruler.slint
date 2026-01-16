@@ -46,18 +46,18 @@ export component TopRuler inherits Rectangle {
     for i in root.tick-count : Rectangle {
         property <int> index: i - root.tick-count / 2;
         property <float> delta-deg: self.index * root.tick-step-deg;
-        property <bool> major: Math.mod(self.index, 3) == 0;
         property <float> remainder-deg: root.mod-positive(root.heading-unwrapped, root.tick-step-deg);
         property <float> tick-heading: root.normalize-heading(root.heading-unwrapped - self.remainder-deg + self.delta-deg);
         property <float> emphasis: root.focus-factor(self.delta-deg - self.remainder-deg);
+        property <bool> label-tick: Math.mod(round(self.tick-heading), 15) == 0;
 
         x: root.width / 2 + (self.delta-deg - self.remainder-deg) * root.pixels-per-degree - self.width / 2;
-        y: 0px - self.emphasis * (self.major ? 16px : 10px);
-        width: (self.major ? 2px : 1px) + self.emphasis * (self.major ? 3px : 2px);
-        height: (self.major ? 15px : 8px) + self.emphasis * (self.major ? 16px : 10px);
-        background: self.major ? #ffffff : #888888;
+        y: 0px;
+        width: self.label-tick ? 2px : 1px;
+        height: self.label-tick ? 15px : 8px;
+        background: self.label-tick ? #ffffff : #888888;
 
-        if self.major: Text {
+        if self.label-tick: Text {
             x: -24px;
             y: 18px;
             width: 48px;
@@ -72,7 +72,7 @@ export component TopRuler inherits Rectangle {
 
     Text {
         x: root.width / 2 - 60px;
-        y: 36px;
+        y: 28px;
         width: 120px;
         height: 24px;
         text: "\{round(root.heading)}";
