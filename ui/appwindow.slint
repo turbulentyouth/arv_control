@@ -10,14 +10,25 @@ export component AppWindow inherits Window {
     preferred-height: 720px;
     background: #121212;
 
+    out property <float> heading: 0;
+    callback heading-updated(float);
+
+    public function scroll-to-heading(target: float) {
+        top-ruler.scroll-to-heading(target);
+    }
+
     GridLayout {
         padding: 0px;
         spacing: 0px;
         
         // Top Heading Ruler
-        TopRuler {
+        top-ruler := TopRuler {
             row: 0;
             col: 0;
+            heading-updated(value) => {
+                root.heading = value;
+                root.heading-updated(value);
+            }
         }
 
         // Main Viewport Area
