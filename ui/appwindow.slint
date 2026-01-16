@@ -9,6 +9,7 @@ export component AppWindow inherits Window {
     preferred-width: 1280px;
     preferred-height: 720px;
     background: #121212;
+    forward-focus: main-focus-scope;
 
     out property <float> heading: 0;
     in-out property <image> video-frame;
@@ -20,18 +21,44 @@ export component AppWindow inherits Window {
     in-out property <string> throttle-text: "0%";
     in-out property <string> battery-text: "N/A";
     in-out property <string> mode-text: "MANUAL";
+    in-out property <string> armed-text: "锁定";
 
     callback heading-updated(float);
+    callback key-event(string, bool);
 
     public function scroll-to-heading(target: float) {
         top-ruler.scroll-to-heading(target);
     }
 
     // Main Viewport Area (Full Screen)
-    Rectangle {
+    main-focus-scope := FocusScope {
         width: 100%;
         height: 100%;
-        background: #1e1e1e; // Main Camera Placeholder
+        // Grab focus by default so keyboard events work immediately
+        // focus: true; // Removed as it caused compile error
+
+        key-pressed(event) => {
+            root.key-event(event.text, true);
+            accept
+        }
+        key-released(event) => {
+            root.key-event(event.text, false);
+            accept
+        }
+
+        // Ensure clicking the background grabs focus
+        TouchArea {
+            width: 100%;
+            height: 100%;
+            clicked => {
+                main-focus-scope.focus();
+            }
+        }
+
+        Rectangle {
+            width: 100%;
+            height: 100%;
+            background: #1e1e1e; // Main Camera Placeholder
 
         // Center Logo (Background Layer)
         VerticalLayout {
@@ -87,6 +114,7 @@ export component AppWindow inherits Window {
         roll: root.roll-text;
         battery: root.battery-text;
         mode: root.mode-text;
+        armed: root.armed-text;
     }
 
     // Left Sidebar Controls (Overlay)
@@ -100,4 +128,5 @@ export component AppWindow inherits Window {
         x: self.is-hovering ? parent.width - self.width - 12px : parent.width - 10px;
         animate x { duration: 250ms; easing: ease-in-out; }
     }
+  }
 }
