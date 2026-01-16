@@ -5,6 +5,11 @@ edition = "2021"
 
 [dependencies]
 slint = "1.8"
+ffmpeg-next = "8.0"
+log = "0.4"
+env_logger = "0.11"
+mavlink = "0.12"
+anyhow = "1.0"
 
 [build-dependencies]
 slint-build = "1.8"

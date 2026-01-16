@@ -1,58 +1,119 @@
 export component TopRuler inherits Rectangle {
+    callback heading-updated(float);
+    property <float> heading-unwrapped: 0;
+    out property <float> heading: root.normalize-heading(root.heading-unwrapped);
+    property <length> pixels-per-degree: 4px;
+    property <float> tick-step-deg: 5;
+    property <int> tick-count: 181;
+    property <float> focus-range-deg: 18;
+
     height: 60px;
-    background: #000000;
-    
-    // Ruler Ticks
-    HorizontalLayout {
-        padding-left: 0px;
-        alignment: center;
-        spacing: 0px;
-        
-        for i in 13 : Rectangle {
-            width: 80px;
-            height: parent.height;
-            
-            Rectangle {
-                y: 0;
-                width: 2px;
-                height: 15px;
-                background: white;
-                x: (parent.width - self.width) / 2;
-            }
-            
-            Text {
-                y: 20px;
-                text: i * 10;
-                color: white;
-                font-size: 14px;
-                horizontal-alignment: center;
-            }
-            
-            // Small ticks
-            for j in 4 : Rectangle {
-                    y: 0;
-                    height: 8px;
-                    width: 1px;
-                    background: #888888;
-                    // Approximate positioning for small ticks
-                    x: (parent.width / 5) * (j + 1);
-            }
+    background: #00000080;
+    clip: true;
+
+    animate heading-unwrapped {
+        duration: touch.pressed ? 0ms : 200ms;
+        easing: ease-in-out;
+    }
+
+    pure function normalize-heading(value: float) -> float {
+        let x = Math.mod(value, 360);
+        x < 0 ? x + 360 : x
+    }
+
+    pure function mod-positive(value: float, modulus: float) -> float {
+        let x = Math.mod(value, modulus);
+        x < 0 ? x + modulus : x
+    }
+
+    pure function abs(value: float) -> float {
+        value < 0 ? -value : value
+    }
+
+    pure function focus-factor(delta: float) -> float {
+        let t = 1 - root.abs(delta) / root.focus-range-deg;
+        t < 0 ? 0 : t
+    }
+
+    public function scroll-to-heading(target: float) {
+        let t = root.normalize-heading(target);
+        let current = root.normalize-heading(root.heading-unwrapped);
+        let delta = Math.mod(t - current + 540, 360) - 180;
+        root.heading-unwrapped += delta;
+        root.heading-updated(t);
+    }
+
+    for i in root.tick-count : Rectangle {
+        property <int> index: i - root.tick-count / 2;
+        property <float> delta-deg: self.index * root.tick-step-deg;
+        property <float> remainder-deg: root.mod-positive(root.heading-unwrapped, root.tick-step-deg);
+        property <float> tick-heading: root.normalize-heading(root.heading-unwrapped - self.remainder-deg + self.delta-deg);
+        property <float> emphasis: root.focus-factor(self.delta-deg - self.remainder-deg);
+        property <bool> label-tick: Math.mod(round(self.tick-heading), 15) == 0;
+
+        x: root.width / 2 + (self.delta-deg - self.remainder-deg) * root.pixels-per-degree - self.width / 2;
+        y: 0px;
+        width: self.label-tick ? 2px : 1px;
+        height: self.label-tick ? 15px : 8px;
+        background: self.label-tick ? #ffffff : #888888;
+
+        if self.label-tick: Text {
+            x: -24px;
+            y: 18px;
+            width: 48px;
+            text: "\{round(parent.tick-heading)}";
+            color: #ffffff;
+            font-size: 14px;
+            font-weight: 700;
+            horizontal-alignment: center;
+            opacity: 1 - parent.emphasis;
         }
     }
-    
-    // Center Indicator (Red Triangle/Line)
-    Rectangle {
-        x: (parent.width - self.width) / 2;
-        y: 0;
-        width: 2px;
-        height: 30px;
-        background: #ff3333;
-    }
+
     Text {
-        x: (parent.width - self.width) / 2;
-        y: 35px;
-        text: "0.0";
-        color: #ff3333;
-        font-size: 14px;
+        x: root.width / 2 - 60px;
+        y: 28px;
+        width: 120px;
+        height: 24px;
+        text: "\{round(root.heading)}";
+        color: #ffffff;
+        font-size: 18px;
+        font-weight: 800;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    touch := TouchArea {
+        width: 100%;
+        height: 100%;
+        mouse-cursor: self.pressed ? grabbing : grab;
+
+        property <float> pressed-heading: 0;
+
+        pointer-event(event) => {
+            if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
+                self.pressed-heading = root.heading-unwrapped;
+            }
+            if (event.button == PointerEventButton.left && event.kind == PointerEventKind.up) {
+                root.heading-unwrapped = round(root.heading-unwrapped);
+                root.heading-updated(root.normalize-heading(root.heading-unwrapped));
+            }
+        }
+
+        moved => {
+            if (self.pressed) {
+                root.heading-unwrapped =
+                    self.pressed-heading
+                    - (self.mouse-x - self.pressed-x) / root.pixels-per-degree;
+                root.heading-updated(root.normalize-heading(root.heading-unwrapped));
+            }
+        }
+
+        scroll-event(event) => {
+            root.heading-unwrapped =
+                root.heading-unwrapped - (event.delta-x + event.delta-y) / root.pixels-per-degree;
+            root.heading-updated(root.normalize-heading(root.heading-unwrapped));
+            accept
+        }
     }
 }

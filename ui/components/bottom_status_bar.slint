@@ -1,23 +1,30 @@
 import { StatusItem } from "./status_item.slint";
 
 export component BottomStatusBar inherits Rectangle {
+    in property <string> throttle: "N/A";
+    in property <string> depth: "N/A";
+    in property <string> pitch: "N/A";
+    in property <string> roll: "N/A";
+    in property <string> battery: "---";
+    in property <string> mode: "---";
+
     height: 40px;
-    background: #2b3b4b;
+    background: #2b3b4b80;
     
     HorizontalLayout {
         padding-left: 20px;
         padding-right: 20px;
         spacing: 20px;
         
-        StatusItem { label: "油门:"; value: "N/A"; }
-        StatusItem { label: "深度:"; value: "N/A"; }
-        StatusItem { label: "俯仰角:"; value: "N/A"; }
-        StatusItem { label: "滚转角:"; value: "N/A"; }
+        StatusItem { label: "油门:"; value: root.throttle; }
+        StatusItem { label: "深度:"; value: root.depth; }
+        StatusItem { label: "俯仰角:"; value: root.pitch; }
+        StatusItem { label: "滚转角:"; value: root.roll; }
         
         Rectangle { width: 20px; } // Spacer
 
         StatusItem { label: "手柄:"; value: "---"; }
-        StatusItem { label: "模式:"; value: "---"; }
-        StatusItem { label: "电池:"; value: "---"; }
+        StatusItem { label: "模式:"; value: root.mode; }
+        StatusItem { label: "电池:"; value: root.battery; }
     }
 }

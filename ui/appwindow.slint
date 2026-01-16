@@ -10,61 +10,94 @@ export component AppWindow inherits Window {
     preferred-height: 720px;
     background: #121212;
 
-    GridLayout {
-        padding: 0px;
-        spacing: 0px;
-        
-        // Top Heading Ruler
-        TopRuler {
-            row: 0;
-            col: 0;
-        }
+    out property <float> heading: 0;
+    in-out property <image> video-frame;
+    
+    // Status properties
+    in-out property <string> pitch-text: "0°";
+    in-out property <string> roll-text: "0°";
+    in-out property <string> depth-text: "0.0 m";
+    in-out property <string> throttle-text: "0%";
+    in-out property <string> battery-text: "N/A";
+    in-out property <string> mode-text: "MANUAL";
 
-        // Main Viewport Area
-        Rectangle {
-            row: 1;
-            col: 0;
-            background: #1e1e1e; // Main Camera Placeholder
+    callback heading-updated(float);
+
+    public function scroll-to-heading(target: float) {
+        top-ruler.scroll-to-heading(target);
+    }
+
+    // Main Viewport Area (Full Screen)
+    Rectangle {
+        width: 100%;
+        height: 100%;
+        background: #1e1e1e; // Main Camera Placeholder
+
+        // Center Logo (Background Layer)
+        VerticalLayout {
+            alignment: center;
+            spacing: 10px;
             
-            // Center Logo
-            VerticalLayout {
-                alignment: center;
-                spacing: 10px;
-                
-                // Stylized Logo (Text representation)
-                Text {
-                    text: "< X >"; 
-                    font-size: 80px;
-                    color: #444444;
-                    horizontal-alignment: center;
-                    font-weight: 900;
-                }
-                Text {
-                    text: "华中科技大学";
-                    font-size: 32px;
-                    color: #888888;
-                    horizontal-alignment: center;
-                    font-weight: 700;
-                }
+            // Stylized Logo (Text representation)
+            Text {
+                text: "< X >"; 
+                font-size: 80px;
+                color: #444444;
+                horizontal-alignment: center;
+                font-weight: 900;
             }
-
-            // Left Sidebar Controls
-            LeftSidebar {
-                y: (parent.height - self.height) / 2;
-            }
-
-            // Right Sidebar Controls
-            RightSidebar {
-                y: (parent.height - self.height) / 2;
-                x: self.is-hovering ? parent.width - self.width - 12px : parent.width - 10px;
-                animate x { duration: 250ms; easing: ease-in-out; }
+            Text {
+                text: "华中科技大学";
+                font-size: 32px;
+                color: #888888;
+                horizontal-alignment: center;
+                font-weight: 700;
             }
         }
 
-        // Bottom Status Bar
-        BottomStatusBar {
-            row: 2;
-            col: 0;
+        Image {
+            width: 100%;
+            height: 100%;
+            source: root.video-frame;
+            image-fit: contain; // Changed to cover or contain? User said "expand video range".
+                                // If contain, we might see black bars if aspect ratio differs.
+                                // If we want to fill the window, maybe "cover"? 
+                                // But usually for ROV control, seeing the whole image is critical. "contain" is safer.
+                                // But since the container is now full window, "contain" will use max available space.
         }
+    }
+    
+    // Top Heading Ruler (Overlay)
+    top-ruler := TopRuler {
+        y: 0;
+        width: 100%;
+        heading-updated(value) => {
+            root.heading = value;
+            root.heading-updated(value);
+        }
+    }
+
+    // Bottom Status Bar (Overlay)
+    BottomStatusBar {
+        y: parent.height - self.height;
+        width: 100%;
+        throttle: root.throttle-text;
+        depth: root.depth-text;
+        pitch: root.pitch-text;
+        roll: root.roll-text;
+        battery: root.battery-text;
+        mode: root.mode-text;
+    }
+
+    // Left Sidebar Controls (Overlay)
+    LeftSidebar {
+        y: (parent.height - self.height) / 2;
+    }
+
+    // Right Sidebar Controls (Overlay)
+    RightSidebar {
+        y: (parent.height - self.height) / 2;
+        x: self.is-hovering ? parent.width - self.width - 12px : parent.width - 10px;
+        animate x { duration: 250ms; easing: ease-in-out; }
     }
 }
