@@ -120,8 +120,12 @@ pub fn run_mavlink_recv(mav: MavConn, ui_handle: Weak<AppWindow>) -> anyhow::Res
                         },
                         MavMessage::VFR_HUD(hud) => {
                             ui.invoke_scroll_to_heading(hud.heading as f32);
-                            ui.set_depth_text(format!("{:.2} m", hud.alt).into());
+                            // ui.set_depth_text(format!("{:.2} m", hud.alt).into());
                             ui.set_throttle_text(format!("{}%", hud.throttle).into());
+                        },
+                        MavMessage::GLOBAL_POSITION_INT(pos) => {
+                             let depth = -pos.relative_alt as f32 / 1000.0;
+                             ui.set_depth_text(format!("{:.2} m", depth).into());
                         },
                         MavMessage::SYS_STATUS(status) => {
                             ui.set_battery_text(format!("{}%", status.battery_remaining).into());
