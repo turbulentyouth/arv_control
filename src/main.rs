@@ -1,6 +1,7 @@
 mod input;
 mod video;
 mod mav;
+mod gesture;
 
 use std::thread;
 use std::sync::{Arc, Mutex};
@@ -15,11 +16,13 @@ fn main() -> Result<(), slint::PlatformError> {
     env_logger::init();
 
     let ui = AppWindow::new()?;
-    let ui_handle = ui.as_weak();
+    
+    let input_state = Arc::new(Mutex::new(InputState::default()));
 
-    // Spawn video player thread
+    let ui_handle = ui.as_weak();
+    let input_state_video = input_state.clone();
     thread::spawn(move || {
-        if let Err(e) = video::run_video_player(ui_handle) {
+        if let Err(e) = video::run_video_player(ui_handle, input_state_video) {
             eprintln!("Video player error: {}", e);
         }
     });
@@ -29,9 +32,6 @@ fn main() -> Result<(), slint::PlatformError> {
     println!("MAVLink listening on {}", mav_conn_str);
     let mav = mavlink::connect::<MavMessage>(mav_conn_str).expect("Failed to connect to MAVLink");
     let mav = Arc::new(mav);
-
-    // Input State
-    let input_state = Arc::new(Mutex::new(InputState::default()));
 
     // Recv Thread
     let mav_clone_recv = mav.clone();
@@ -75,8 +75,26 @@ fn main() -> Result<(), slint::PlatformError> {
                     mav::send_arm_disarm(&mav_clone_key, target_arm);
                 }
             }
-            "1" if pressed => mav::send_mode(&mav_clone_key, 19), // MANUAL
-            "2" if pressed => mav::send_mode(&mav_clone_key, 2),  // ALT_HOLD
+            "1" if pressed => {
+                state.gesture_mode = false;
+                if let Some(ui) = ui_handle.upgrade() {
+                    ui.set_gesture_text("OFF".into());
+                }
+                mav::send_mode(&mav_clone_key, 19); // MANUAL
+            }
+            "2" if pressed => {
+                state.gesture_mode = false;
+                 if let Some(ui) = ui_handle.upgrade() {
+                    ui.set_gesture_text("OFF".into());
+                }
+                mav::send_mode(&mav_clone_key, 2); // ALT_HOLD
+            }
+            "9" if pressed => {
+                state.gesture_mode = true;
+                if let Some(ui) = ui_handle.upgrade() {
+                    ui.set_gesture_text("ON (WAITING)".into());
+                }
+            }
             _ => {}
         }
     });

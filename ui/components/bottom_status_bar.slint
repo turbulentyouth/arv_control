@@ -7,6 +7,7 @@ export component BottomStatusBar inherits Rectangle {
     in property <string> roll: "N/A";
     in property <string> battery: "---";
     in property <string> mode: "---";
+    in property <string> gesture: "";
     in property <string> armed: "锁定";
 
     height: 40px;
@@ -26,6 +27,7 @@ export component BottomStatusBar inherits Rectangle {
 
         StatusItem { label: "手柄:"; value: "---"; }
         StatusItem { label: "模式:"; value: root.mode; }
+        StatusItem { label: "手势:"; value: root.gesture; }
         StatusItem { label: "状态:"; value: root.armed; }
         StatusItem { label: "电池:"; value: root.battery; }
     }

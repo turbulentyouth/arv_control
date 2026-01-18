@@ -21,6 +21,7 @@ export component AppWindow inherits Window {
     in-out property <string> throttle-text: "0%";
     in-out property <string> battery-text: "N/A";
     in-out property <string> mode-text: "MANUAL";
+    in-out property <string> gesture-text: "OFF";
     in-out property <string> armed-text: "锁定";
 
     callback heading-updated(float);
@@ -115,6 +116,7 @@ export component AppWindow inherits Window {
         roll: root.roll-text;
         battery: root.battery-text;
         mode: root.mode-text;
+        gesture: root.gesture-text;
         armed: root.armed-text;
     }
 
