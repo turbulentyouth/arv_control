@@ -1,15 +1,12 @@
 use crate::AppWindow;
-use crate::gesture::{GestureLogic, HandDetector, HandPose, resolve_model_path};
+use crate::gesture::{GestureLogic, PyMediaPipe};
 use crate::input::InputState;
-use image::RgbImage;
 use slint::{SharedPixelBuffer, Image, Rgb8Pixel, Weak};
 use ffmpeg_next as ffmpeg;
 use std::sync::{Arc, Mutex, mpsc};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-const DET_MODEL_FILE: &str = "hand_yolov8n.onnx";
-const POSE_MODEL_FILE: &str = "rtmpose_hand.onnx";
 const GESTURE_INFER_INTERVAL_MS: u64 = 0;
 const GESTURE_OVERLAY_MAX_AGE_MS: u64 = 800;
 
@@ -170,16 +167,13 @@ pub fn run_video_player(ui_handle: Weak<AppWindow>, input_state: Arc<Mutex<Input
         let input_state = input_state.clone();
         let gesture_ready = gesture_ready.clone();
         std::thread::spawn(move || {
-            let gesture_init = std::panic::catch_unwind(|| -> anyhow::Result<(HandDetector, HandPose, GestureLogic)> {
-                let det_path = resolve_model_path(DET_MODEL_FILE)?;
-                let pose_path = resolve_model_path(POSE_MODEL_FILE)?;
-                let detector = HandDetector::new(det_path)?;
-                let pose = HandPose::new(pose_path)?;
+            let gesture_init = std::panic::catch_unwind(|| -> anyhow::Result<(PyMediaPipe, GestureLogic)> {
+                let py = PyMediaPipe::new()?;
                 let logic = GestureLogic::new();
-                Ok((detector, pose, logic))
+                Ok((py, logic))
             });
 
-            let (mut detector, mut pose, logic) = match gesture_init {
+            let (py, logic) = match gesture_init {
                 Ok(Ok(p)) => {
                     gesture_ready.store(true, Ordering::Relaxed);
                     p
@@ -215,31 +209,12 @@ pub fn run_video_player(ui_handle: Weak<AppWindow>, input_state: Arc<Mutex<Input
                     continue;
                 }
 
-                let img = match RgbImage::from_raw(width, height, bytes) {
-                    Some(i) => i,
-                    None => continue,
-                };
-
                 let infer_res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> anyhow::Result<(String, Option<[f32; 4]>, Vec<(f32, f32)>)> {
-                    let dets = detector.infer(&img)?;
-                    let mut best_box: Option<[f32; 4]> = None;
-                    let mut max_area = 0.0;
-                    for d in dets {
-                        let area = (d[2] - d[0]) * (d[3] - d[1]);
-                        if area > max_area {
-                            max_area = area;
-                            best_box = Some([d[0], d[1], d[2], d[3]]);
-                        }
-                    }
-
+                    let (best_box, out) = py.infer(width, height, &bytes)?;
                     let mut cmd = "UNKNOWN".to_string();
-                    let mut kpts = Vec::new();
-                    if let Some(bbox) = best_box {
-                        let out = pose.infer(&img, bbox)?;
-                        if !out.is_empty() {
-                            cmd = logic.analyze(&out);
-                            kpts = out;
-                        }
+                    let kpts = out;
+                    if !kpts.is_empty() {
+                        cmd = logic.analyze(&kpts);
                     }
 
                     Ok((cmd, best_box, kpts))

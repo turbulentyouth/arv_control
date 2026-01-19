@@ -10,10 +10,8 @@ log = "0.4"
 env_logger = "0.11"
 mavlink = "0.12"
 anyhow = "1.0"
-ort = { version = "2.0.0-rc.11", features = ["ndarray"] }
-ndarray = "0.17"
 image = "0.25"
-nokhwa = { version = "0.10", features = ["input-native", "output-threaded"] }
+pyo3 = { version = "0.27", features = ["auto-initialize"] }
 
 [build-dependencies]
 slint-build = "1.8"
