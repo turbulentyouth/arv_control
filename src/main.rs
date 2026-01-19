@@ -124,6 +124,16 @@ fn main() -> Result<(), slint::PlatformError> {
         }
     });
 
+    {
+        let input_state_throttle = input_state.clone();
+        ui.on_throttle_limit_changed(move |value| {
+            let mut state = input_state_throttle.lock().unwrap();
+            let v = value.round() as i32;
+            let v = v.clamp(0, 100);
+            state.power_percent = v as u8;
+        });
+    }
+
     let weak_ui = ui.as_weak();
     slint::invoke_from_event_loop(move || {
         let ui = weak_ui.unwrap();

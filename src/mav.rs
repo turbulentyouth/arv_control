@@ -18,16 +18,15 @@ pub fn run_control_loop(mav: MavConn, input: Arc<Mutex<InputState>>) {
             let mut y: u16 = 1500;
             let mut z: u16 = 1500;
             let mut r: u16 = 1500;
-            
-            // Power limit: 20% ( +/- 80 )
-            if s.w { x = 1580; }
-            if s.s { x = 1420; }
-            if s.j { y = 1420; } // Lateral Left
-            if s.l { y = 1580; } // Lateral Right
-            if s.i { z = 1580; } // Ascend (Throttle Up)
-            if s.k { z = 1420; } // Descend
-            if s.a { r = 1420; } // Yaw Left
-            if s.d { r = 1580; } // Yaw Right
+            let amp = (s.power_percent as i32) * 4;
+            if s.w { x = (1500 + amp) as u16; }
+            if s.s { x = (1500 - amp) as u16; }
+            if s.j { y = (1500 - amp) as u16; }
+            if s.l { y = (1500 + amp) as u16; }
+            if s.i { z = (1500 + amp) as u16; }
+            if s.k { z = (1500 - amp) as u16; }
+            if s.a { r = (1500 - amp) as u16; }
+            if s.d { r = (1500 + amp) as u16; }
             (x, y, z, r)
         };
         
