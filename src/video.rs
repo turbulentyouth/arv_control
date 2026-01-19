@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 const DET_MODEL_FILE: &str = "hand_yolov8n.onnx";
 const POSE_MODEL_FILE: &str = "rtmpose_hand.onnx";
-const GESTURE_INFER_INTERVAL_MS: u64 = 250;
+const GESTURE_INFER_INTERVAL_MS: u64 = 0;
 const GESTURE_OVERLAY_MAX_AGE_MS: u64 = 800;
 
 const SKELETON: &[(usize, usize)] = &[
