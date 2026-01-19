@@ -3,13 +3,15 @@ import { IconButton } from "./icon_button.slint";
 export component LeftSidebar inherits Rectangle {
     // Left Sidebar Controls
     callback task-clicked;
+    callback setting-clicked;
+    in property <bool> blocked: false;
     width: 130px; 
     height: left-layout.preferred-height; // Explicitly bind height to content
     background: #2b3b4b; 
     border-radius: 12px;
 
     // Logic for hover expansion
-    property <bool> is-hovering: side-touch.has-hover || task-btn.has-hover || setting-btn.has-hover;
+    property <bool> is-hovering: root.blocked ? false : (side-touch.has-hover || task-btn.has-hover || setting-btn.has-hover);
     
     animate x { duration: 250ms; easing: ease-in-out; }
 
@@ -34,6 +36,12 @@ export component LeftSidebar inherits Rectangle {
         setting-btn := IconButton {
             text: "设置";
             icon: @image-url("../icon/设置.png");
+            clicked => { root.setting-clicked(); }
         }
+    }
+    TouchArea {
+        width: parent.width;
+        height: parent.height;
+        enabled: root.blocked;
     }
 }

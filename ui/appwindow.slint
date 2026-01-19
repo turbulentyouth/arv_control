@@ -1,4 +1,4 @@
-import { Button, VerticalBox, HorizontalBox } from "std-widgets.slint";
+import { Button, VerticalBox, HorizontalBox, Slider } from "std-widgets.slint";
 import { TopRuler } from "./components/top_ruler.slint";
 import { LeftSidebar } from "./components/left_sidebar.slint";
 import { RightSidebar } from "./components/right_sidebar.slint";
@@ -22,10 +22,12 @@ export component AppWindow inherits Window {
     in-out property <string> battery-text: "N/A";
     in-out property <string> mode-text: "MANUAL";
     in-out property <string> armed-text: "锁定";
+    in-out property <float> throttle-limit-percent: 20;
 
     callback heading-updated(float);
     callback key-event(string, bool);
     callback task-clicked;
+    callback throttle-limit-changed(float);
 
     public function scroll-to-heading(target: float) {
         top-ruler.scroll-to-heading(target);
@@ -39,12 +41,20 @@ export component AppWindow inherits Window {
         // focus: true; // Removed as it caused compile error
 
         key-pressed(event) => {
-            root.key-event(event.text, true);
-            accept
+            if (settings-open) {
+                accept
+            } else {
+                root.key-event(event.text, true);
+                accept
+            }
         }
         key-released(event) => {
-            root.key-event(event.text, false);
-            accept
+            if (settings-open) {
+                accept
+            } else {
+                root.key-event(event.text, false);
+                accept
+            }
         }
 
         // Ensure clicking the background grabs focus
@@ -106,7 +116,7 @@ export component AppWindow inherits Window {
     }
 
     // Bottom Status Bar (Overlay)
-    BottomStatusBar {
+    bottom := BottomStatusBar {
         y: parent.height - self.height;
         width: 100%;
         throttle: root.throttle-text;
@@ -122,6 +132,8 @@ export component AppWindow inherits Window {
     LeftSidebar {
         y: (parent.height - self.height) / 2;
         task-clicked => { root.task-clicked(); }
+        setting-clicked => { settings-open = !settings-open; }
+        blocked: settings-open;
     }
 
     // Right Sidebar Controls (Overlay)
@@ -129,6 +141,56 @@ export component AppWindow inherits Window {
         y: (parent.height - self.height) / 2;
         x: self.is-hovering ? parent.width - self.width - 12px : parent.width - 10px;
         animate x { duration: 250ms; easing: ease-in-out; }
+        blocked: settings-open;
+    }
+
+    property <bool> settings-open: false;
+    
+    Rectangle {
+        x: settings-open ? 0px : -self.width;
+        y: top-ruler.height;
+        width: 100%;
+        height: parent.height - top-ruler.height - bottom.height;
+        background: #2b3b4b;
+        animate x { duration: 250ms; easing: ease-in-out; }
+
+        Button {
+            x: 20px;
+            y: 20px;
+            text: "返回";
+            clicked => { settings-open = false; }
+        }
+        VerticalLayout {
+            width: 60%;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            spacing: 16px;
+            Text {
+                text: "油门大小";
+                color: #ffffff;
+                font-size: 18px;
+                font-weight: 700;
+                horizontal-alignment: center;
+            }
+            HorizontalLayout {
+                width: 100%;
+                spacing: 10px;
+                alignment: center;
+                Slider {
+                    width: 80%;
+                    value <=> root.throttle-limit-percent;
+                    minimum: 0;
+                    maximum: 100;
+                    changed => { root.throttle-limit-changed(root.throttle-limit-percent); }
+                }
+                Text {
+                    text: "\{round(root.throttle-limit-percent)}%";
+                    color: #ffffff;
+                    font-size: 14px;
+                    font-weight: 700;
+                }
+            }
+        }
     }
   }
 }
