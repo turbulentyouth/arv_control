@@ -1,0 +1,4 @@
+[target.x86_64-unknown-linux-gnu]
+rustflags = [
+  "-C", "link-arg=-Wl,-rpath,/home/xijingfeng/miniconda3/envs/mediapipe/lib"
+]
