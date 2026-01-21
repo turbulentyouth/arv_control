@@ -5,7 +5,6 @@ edition = "2021"
 
 [dependencies]
 slint = "1.8"
-ffmpeg-next = "8.0"
 log = "0.4"
 env_logger = "0.11"
 mavlink = "0.12"
@@ -13,3 +12,12 @@ anyhow = "1.0"
 
 [build-dependencies]
 slint-build = "1.8"
+
+# 在 Windows 上，它会去寻找系统安装的 FFmpeg
+[target.'cfg(target_os = "windows")'.dependencies]
+ffmpeg-next = "8.0"  # 请确保版本号一致
+
+# === Linux (Deepin) 配置：带 "build" 特性 ===
+# 在 Linux 上，它会自动下载源码并静态编译
+[target.'cfg(target_os = "linux")'.dependencies]
+ffmpeg-next = { version = "8.0", features = ["build"] }
