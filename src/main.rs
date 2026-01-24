@@ -90,9 +90,14 @@ fn main() -> Result<(), slint::PlatformError> {
                 mav::send_mode(&mav_clone_key, 2); // ALT_HOLD
             }
             "9" if pressed => {
-                state.gesture_mode = true;
+                state.gesture_mode = !state.gesture_mode;
+                let text = if state.gesture_mode {
+                    "ON (WAITING)"
+                } else {
+                    "OFF"
+                };
                 if let Some(ui) = ui_handle.upgrade() {
-                    ui.set_gesture_text("ON (WAITING)".into());
+                    ui.set_gesture_text(text.into());
                 }
             }
             _ => {}

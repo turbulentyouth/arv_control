@@ -343,8 +343,11 @@ pub fn run_video_player(ui_handle: Weak<AppWindow>, input_state: Arc<Mutex<Input
                     let image = Image::from_rgb8(pixel_buffer);
                     if let Some(ui) = ui_weak.upgrade() {
                         ui.set_video_frame(image);
+                        // Only update gesture text for valid commands (not "UNKNOWN")
                         if let Some(text) = gesture_text {
-                            ui.set_gesture_text(text.into());
+                            if text != "UNKNOWN" {
+                                ui.set_gesture_text(text.into());
+                            }
                         }
                     }
                 }).ok();
