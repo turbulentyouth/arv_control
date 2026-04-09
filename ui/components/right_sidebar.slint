@@ -211,6 +211,10 @@ component NeutralSwitch inherits Rectangle {
 
 export component RightSidebar inherits Rectangle {
     in property <bool> blocked: false;
+    callback shutter-clicked(int);
+    in-out property <bool> is-recording: false;
+    in-out property <int> camera-mode: 0;
+
     // 基础样式
     background: #2b3b4b;
     border-radius: 12px;
@@ -220,7 +224,6 @@ export component RightSidebar inherits Rectangle {
     height: layout.preferred-height;
     
     // 状态属性
-    property <int> camera-mode: 0; 
     property <bool> sonar-enabled: false;
     property <bool> dvl-enabled: false;
     property <bool> sub-cam-enabled: false;
@@ -266,8 +269,9 @@ export component RightSidebar inherits Rectangle {
             HorizontalLayout {
                 alignment: center;
                 shutter-btn := ShutterButton {
+                    active: root.is-recording && root.camera-mode == 0;
                     clicked => {
-                        debug("Shutter clicked! Mode:", root.camera-mode);
+                        root.shutter-clicked(root.camera-mode);
                     }
                 }
             }
