@@ -48,6 +48,7 @@ export component AppWindow inherits Window {
     callback throttle-limit-changed(float);
     callback shutter-clicked(int);
     callback keyboard-enabled-toggled(bool);
+    callback apply-video-settings;
 
     public function scroll-to-heading(target: float) {
         top-ruler.scroll-to-heading(target);
@@ -214,6 +215,31 @@ export component AppWindow inherits Window {
                 color: white;
                 font-size: 22px;
                 font-weight: 700;
+            }
+
+            // 应用按钮（右上角）
+            Rectangle {
+                x: parent.width - self.width - 20px;
+                y: (parent.height - self.height) / 2;
+                width: apply-btn.preferred-width + 32px;
+                height: 36px;
+                border-radius: 8px;
+                background: #1a7fcc;
+
+                apply-btn := Text {
+                    x: 16px;
+                    y: (parent.height - self.height) / 2;
+                    text: "应用设置";
+                    color: white;
+                    font-size: 14px;
+                    font-weight: 700;
+                }
+
+                TouchArea {
+                    width: 100%;
+                    height: 100%;
+                    clicked => { root.apply-video-settings(); }
+                }
             }
         }
 

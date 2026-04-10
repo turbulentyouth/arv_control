@@ -293,6 +293,8 @@ dependencies = [
  "image",
  "log",
  "mavlink",
+ "serde",
+ "serde_json",
  "slint",
  "slint-build",
 ]
