@@ -4,6 +4,13 @@ use slint::{SharedPixelBuffer, Image, Rgb8Pixel, Weak};
 use ffmpeg_next as ffmpeg;
 use std::sync::mpsc;
 
+/// 视频帧写入槽：Primary 对应单目（video-frame），Secondary 对应双目（video-frame-stereo）
+#[derive(Clone, Copy)]
+pub enum VideoSlot {
+    Primary,
+    Secondary,
+}
+
 // ── MJPEG SOF0 补丁工具 ──────────────────────────────────────────────────────
 
 /// 在 JPEG 字节流中定位 SOF0 (FF C0) 标记并将 H/W 修补为指定值。
@@ -276,13 +283,14 @@ pub fn run_video_player(
     ui_handle: Weak<AppWindow>,
     capture_rx: mpsc::Receiver<CaptureCommand>,
     initial_source: VideoSource,
+    slot: VideoSlot,
 ) -> Result<(), Box<dyn std::error::Error>> {
     ffmpeg::init()?;
 
     let mut current_source = initial_source;
 
     loop {
-        match run_session(&ui_handle, &capture_rx, &current_source) {
+        match run_session(&ui_handle, &capture_rx, &current_source, slot) {
             // 收到 ChangeSource 命令，切换到新视频源
             Ok(Some(new_source)) => {
                 notify(&ui_handle, "正在切换视频源...", true);
@@ -307,6 +315,7 @@ fn run_session(
     ui_handle: &Weak<AppWindow>,
     capture_rx: &mpsc::Receiver<CaptureCommand>,
     source: &VideoSource,
+    slot: VideoSlot,
 ) -> Result<Option<VideoSource>, Box<dyn std::error::Error>> {
     let mut ictx = open_input(source)?;
 
@@ -354,12 +363,16 @@ fn run_session(
         while let Ok(cmd) = capture_rx.try_recv() {
             match cmd {
                 CaptureCommand::TakePhoto { save_path } => {
-                    std::fs::create_dir_all(&save_path).ok();
-                    let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
-                    take_photo_path = Some(format!("{}/photo_{}.png", save_path, ts));
+                    // 仅主槽（单目）响应拍照
+                    if matches!(slot, VideoSlot::Primary) {
+                        std::fs::create_dir_all(&save_path).ok();
+                        let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
+                        take_photo_path = Some(format!("{}/photo_{}.png", save_path, ts));
+                    }
                 }
                 CaptureCommand::StartRecording { save_path } => {
-                    if recorder.is_none() {
+                    // 仅主槽（单目）响应录像
+                    if matches!(slot, VideoSlot::Primary) && recorder.is_none() {
                         std::fs::create_dir_all(&save_path).ok();
                         let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
                         let path = format!("{}/video_{}.mp4", save_path, ts);
@@ -380,11 +393,14 @@ fn run_session(
                     }
                 }
                 CaptureCommand::StopRecording => {
-                    if let Some(rec) = recorder.take() {
-                        match rec.finish() {
-                            Ok(()) => notify(ui_handle, "录像已保存", true),
-                            Err(e) => {
-                                notify(ui_handle, &format!("录像保存失败: {}", e), false);
+                    // 仅主槽（单目）响应停止录像
+                    if matches!(slot, VideoSlot::Primary) {
+                        if let Some(rec) = recorder.take() {
+                            match rec.finish() {
+                                Ok(()) => notify(ui_handle, "录像已保存", true),
+                                Err(e) => {
+                                    notify(ui_handle, &format!("录像保存失败: {}", e), false);
+                                }
                             }
                         }
                     }
@@ -392,7 +408,9 @@ fn run_session(
                 CaptureCommand::ChangeSource { source: new_source } => {
                     if let Some(rec) = recorder.take() {
                         rec.finish().ok();
-                        set_recording_ui(ui_handle, false);
+                        if matches!(slot, VideoSlot::Primary) {
+                            set_recording_ui(ui_handle, false);
+                        }
                     }
                     return Ok(Some(new_source));
                 }
@@ -445,7 +463,10 @@ fn run_session(
             slint::invoke_from_event_loop(move || {
                 let image = Image::from_rgb8(pixel_buffer);
                 if let Some(ui) = ui_weak.upgrade() {
-                    ui.set_video_frame(image);
+                    match slot {
+                        VideoSlot::Primary => ui.set_video_frame(image),
+                        VideoSlot::Secondary => ui.set_video_frame_stereo(image),
+                    }
                 }
             })
             .ok();
@@ -523,7 +544,10 @@ fn run_session(
                 slint::invoke_from_event_loop(move || {
                     let image = Image::from_rgb8(pixel_buffer);
                     if let Some(ui) = ui_weak.upgrade() {
-                        ui.set_video_frame(image);
+                        match slot {
+                            VideoSlot::Primary => ui.set_video_frame(image),
+                            VideoSlot::Secondary => ui.set_video_frame_stereo(image),
+                        }
                     }
                 })
                 .ok();

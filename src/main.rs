@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex};
 use std::path::PathBuf;
 use crate::input::InputState;
 use crate::capture::{CaptureCommand, VideoSource};
+use crate::video::VideoSlot;
 use crate::settings::AppSettings;
 use slint::ComponentHandle;
 
@@ -27,6 +28,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // 将保存的设置应用到 UI
     ui.set_video_source_index(saved.video_source_index);
     ui.set_video_stream_url(saved.video_stream_url.clone().into());
+    ui.set_video_stream_stereo_url(saved.video_stream_stereo_url.clone().into());
     ui.set_rov_ip(saved.rov_ip.clone().into());
     ui.set_keyboard_enabled(saved.keyboard_enabled);
     ui.set_throttle_limit_percent(saved.throttle_limit);
@@ -54,6 +56,7 @@ fn main() -> Result<(), slint::PlatformError> {
     ui.set_video_save_path(video_path.into());
 
     let (capture_tx, capture_rx) = capture::channel();
+    let (stereo_tx, stereo_rx) = capture::channel();
 
     // 从（已更新的）UI 读取初始视频源
     let source_index = ui.get_video_source_index();
@@ -63,11 +66,23 @@ fn main() -> Result<(), slint::PlatformError> {
         _ => VideoSource::Rtsp { url: stream_url },
     };
 
-    // ── 视频播放线程（自动重连，支持运行时切换源）──
+    // 双目相机初始视频源（始终 RTSP）
+    let stereo_url = ui.get_video_stream_stereo_url().to_string();
+    let initial_stereo_source = VideoSource::Rtsp { url: stereo_url };
+
+    // ── 单目视频播放线程（主槽，支持录像/拍照）──
     let ui_handle_video = ui.as_weak();
     thread::spawn(move || {
-        if let Err(e) = video::run_video_player(ui_handle_video, capture_rx, initial_source) {
-            eprintln!("视频播放器致命错误: {}", e);
+        if let Err(e) = video::run_video_player(ui_handle_video, capture_rx, initial_source, VideoSlot::Primary) {
+            eprintln!("单目视频播放器致命错误: {}", e);
+        }
+    });
+
+    // ── 双目视频播放线程（副槽，仅显示）──
+    let ui_handle_stereo = ui.as_weak();
+    thread::spawn(move || {
+        if let Err(e) = video::run_video_player(ui_handle_stereo, stereo_rx, initial_stereo_source, VideoSlot::Secondary) {
+            eprintln!("双目视频播放器致命错误: {}", e);
         }
     });
 
@@ -248,6 +263,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // ── 应用设置回调：点击"应用设置"按钮时切换视频源并持久化 ──
     {
         let capture_tx_settings = capture_tx.clone();
+        let stereo_tx_settings = stereo_tx.clone();
         let ui_handle_settings = ui.as_weak();
         ui.on_apply_video_settings(move || {
             let ui = match ui_handle_settings.upgrade() {
@@ -255,9 +271,9 @@ fn main() -> Result<(), slint::PlatformError> {
                 None => return,
             };
 
+            // 单目视频源切换
             let current_url = ui.get_video_stream_url().to_string();
             let current_index = ui.get_video_source_index();
-
             let new_source = match current_index {
                 1 => VideoSource::Camera { device: current_url.clone() },
                 _ => VideoSource::Rtsp { url: current_url.clone() },
@@ -265,11 +281,22 @@ fn main() -> Result<(), slint::PlatformError> {
             capture_tx_settings
                 .send(CaptureCommand::ChangeSource { source: new_source })
                 .ok();
-            println!("应用视频设置: {} (index={})", current_url, current_index);
+
+            // 双目视频源切换（始终 RTSP）
+            let stereo_url = ui.get_video_stream_stereo_url().to_string();
+            stereo_tx_settings
+                .send(CaptureCommand::ChangeSource {
+                    source: VideoSource::Rtsp { url: stereo_url.clone() },
+                })
+                .ok();
+
+            println!("应用单目视频设置: {} (index={})", current_url, current_index);
+            println!("应用双目视频设置: {}", stereo_url);
 
             let s = AppSettings {
                 video_source_index: current_index,
                 video_stream_url: current_url,
+                video_stream_stereo_url: stereo_url,
                 rov_ip: ui.get_rov_ip().to_string(),
                 keyboard_enabled: ui.get_keyboard_enabled(),
                 throttle_limit: ui.get_throttle_limit_percent(),
@@ -295,6 +322,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 let s = AppSettings {
                     video_source_index: ui.get_video_source_index(),
                     video_stream_url: ui.get_video_stream_url().to_string(),
+                    video_stream_stereo_url: ui.get_video_stream_stereo_url().to_string(),
                     rov_ip: ui.get_rov_ip().to_string(),
                     keyboard_enabled: ui.get_keyboard_enabled(),
                     throttle_limit: ui.get_throttle_limit_percent(),

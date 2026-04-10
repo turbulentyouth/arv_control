@@ -13,6 +13,7 @@ export component AppWindow inherits Window {
 
     out property <float> heading: 0;
     in-out property <image> video-frame;
+    in-out property <image> video-frame-stereo;
     
     // Status properties
     in-out property <string> pitch-text: "0°";
@@ -29,6 +30,7 @@ export component AppWindow inherits Window {
     in-out property <string> rov-ip: "192.168.137.2";
     in-out property <int> video-source-index: 0;
     in-out property <string> video-stream-url: "rtsp://192.168.137.2:8554/video";
+    in-out property <string> video-stream-stereo-url: "rtsp://192.168.137.2:8555/video_s";
     in-out property <string> version-text: "0.1.0";
     in-out property <bool> is-recording: false;
     in-out property <int> camera-mode: 0;
@@ -108,36 +110,140 @@ export component AppWindow inherits Window {
         Rectangle {
             width: 100%;
             height: 100%;
-            background: #1e1e1e;
+            background: #121212;
 
-        // Center Logo (Background Layer)
-        VerticalLayout {
-            alignment: center;
-            spacing: 10px;
-            
-            Text {
-                text: "< X >"; 
-                font-size: 80px;
-                color: #444444;
-                horizontal-alignment: center;
-                font-weight: 900;
-            }
-            Text {
-                text: "ARV-Control";
-                font-size: 32px;
-                color: #888888;
-                horizontal-alignment: center;
-                font-weight: 700;
+            // ── 倒三角双摄布局 ──
+            // 上方：双目（宽屏，占 60% 高度）
+            // 下方：单目（居中较窄，占 40% 高度）
+            VerticalLayout {
+                width: 100%;
+                height: 100%;
+                spacing: 0;
+
+                // ── 上半区：双目相机 ──
+                Rectangle {
+                    vertical-stretch: 3;
+                    background: #0d0d0d;
+                    clip: true;
+
+                    // 无信号占位
+                    VerticalLayout {
+                        alignment: center;
+                        spacing: 6px;
+                        Text {
+                            text: "◈ ◈";
+                            font-size: 40px;
+                            color: #2a2a2a;
+                            horizontal-alignment: center;
+                            font-weight: 900;
+                        }
+                        Text {
+                            text: "双目相机";
+                            font-size: 14px;
+                            color: #333333;
+                            horizontal-alignment: center;
+                        }
+                    }
+
+                    Image {
+                        width: 100%;
+                        height: 100%;
+                        source: root.video-frame-stereo;
+                        image-fit: contain;
+                    }
+
+                    // 相机标签
+                    Rectangle {
+                        x: 10px;
+                        y: 8px;
+                        width: label-stereo.preferred-width + 16px;
+                        height: 22px;
+                        border-radius: 4px;
+                        background: #00000066;
+                        label-stereo := Text {
+                            x: 8px;
+                            y: (parent.height - self.height) / 2;
+                            text: "双目 · STEREO";
+                            color: #aaaaaa;
+                            font-size: 11px;
+                        }
+                    }
+                }
+
+                // ── 分隔线 ──
+                Rectangle {
+                    height: 2px;
+                    background: #1e1e1e;
+                    vertical-stretch: 0;
+                }
+
+                // ── 下半区：单目相机（居中，宽度约 55%，呈倒三角收窄效果）──
+                Rectangle {
+                    vertical-stretch: 2;
+                    background: #111111;
+                    clip: true;
+
+                    // 无信号占位
+                    VerticalLayout {
+                        alignment: center;
+                        spacing: 6px;
+                        Text {
+                            text: "◈";
+                            font-size: 36px;
+                            color: #2a2a2a;
+                            horizontal-alignment: center;
+                            font-weight: 900;
+                        }
+                        Text {
+                            text: "单目相机";
+                            font-size: 14px;
+                            color: #333333;
+                            horizontal-alignment: center;
+                        }
+                    }
+
+                    // 单目视频：居中，55% 宽，营造倒三角收窄视觉
+                    Image {
+                        width: 55%;
+                        height: 100%;
+                        x: (parent.width - self.width) / 2;
+                        source: root.video-frame;
+                        image-fit: contain;
+                    }
+
+                    // 左右暗角（强化倒三角视觉）
+                    Rectangle {
+                        x: 0;
+                        width: (parent.width - parent.width * 55% ) / 2;
+                        height: 100%;
+                        background: #0a0a0a;
+                    }
+                    Rectangle {
+                        x: parent.width - self.width;
+                        width: (parent.width - parent.width * 55% ) / 2;
+                        height: 100%;
+                        background: #0a0a0a;
+                    }
+
+                    // 相机标签
+                    Rectangle {
+                        x: (parent.width - self.width) / 2;
+                        y: 6px;
+                        width: label-mono.preferred-width + 16px;
+                        height: 22px;
+                        border-radius: 4px;
+                        background: #00000066;
+                        label-mono := Text {
+                            x: 8px;
+                            y: (parent.height - self.height) / 2;
+                            text: "单目 · MONO";
+                            color: #aaaaaa;
+                            font-size: 11px;
+                        }
+                    }
+                }
             }
         }
-
-        Image {
-            width: 100%;
-            height: 100%;
-            source: root.video-frame;
-            image-fit: contain;
-        }
-    }
     
     // Top Heading Ruler (Overlay)
     top-ruler := TopRuler {
@@ -264,9 +370,17 @@ export component AppWindow inherits Window {
                 LineEdit { text <=> root.rov-ip; placeholder-text: "例: 192.168.137.2"; }
             }
 
+            // ── 单目相机 ──
+            Text {
+                text: "单目相机";
+                color: #7ab8e8;
+                font-size: 13px;
+                font-weight: 700;
+            }
+
             HorizontalLayout {
                 spacing: 12px;
-                Text { text: "视频源"; color: #ccddee; font-size: 14px; width: 100px; vertical-alignment: center; }
+                Text { text: "视频源类型"; color: #ccddee; font-size: 14px; width: 100px; vertical-alignment: center; }
                 ComboBox {
                     model: ["RTSP", "摄像头"];
                     current-index <=> root.video-source-index;
@@ -275,12 +389,48 @@ export component AppWindow inherits Window {
 
             HorizontalLayout {
                 spacing: 12px;
-                Text { text: "视频流路径"; color: #ccddee; font-size: 14px; width: 100px; vertical-alignment: center; }
+                Text { text: "流地址"; color: #ccddee; font-size: 14px; width: 100px; vertical-alignment: center; }
                 LineEdit {
                     text <=> root.video-stream-url;
                     placeholder-text: root.video-source-index == 0
                         ? "例: rtsp://192.168.137.2:8554/video"
                         : "摄像头设备名（留空使用默认）";
+                }
+            }
+
+            Rectangle { height: 1px; background: #2a3a4a; }
+
+            // ── 双目相机 ──
+            Text {
+                text: "双目相机";
+                color: #7ab8e8;
+                font-size: 13px;
+                font-weight: 700;
+            }
+
+            HorizontalLayout {
+                spacing: 12px;
+                Text { text: "视频源类型"; color: #ccddee; font-size: 14px; width: 100px; vertical-alignment: center; }
+                Rectangle {
+                    height: 32px;
+                    border-radius: 4px;
+                    background: #1a2a3a;
+                    Text {
+                        x: 10px;
+                        y: (parent.height - self.height) / 2;
+                        text: "RTSP（固定）";
+                        color: #778899;
+                        font-size: 14px;
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 12px;
+                Text { text: "流地址"; color: #ccddee; font-size: 14px; width: 100px; vertical-alignment: center; }
+                LineEdit {
+                    text <=> root.video-stream-stereo-url;
+                    placeholder-text: "例: rtsp://192.168.137.2:8555/video_s";
                 }
             }
 

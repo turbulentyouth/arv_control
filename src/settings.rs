@@ -1,10 +1,16 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+fn default_stereo_url() -> String {
+    "rtsp://192.168.137.2:8555/video_s".to_string()
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct AppSettings {
     pub video_source_index: i32,
     pub video_stream_url: String,
+    #[serde(default = "default_stereo_url")]
+    pub video_stream_stereo_url: String,
     pub rov_ip: String,
     pub keyboard_enabled: bool,
     pub throttle_limit: f32,
@@ -17,6 +23,7 @@ impl Default for AppSettings {
         Self {
             video_source_index: 0,
             video_stream_url: "rtsp://192.168.137.2:8554/video".to_string(),
+            video_stream_stereo_url: "rtsp://192.168.137.2:8555/video_s".to_string(),
             rov_ip: "192.168.137.2".to_string(),
             keyboard_enabled: true,
             throttle_limit: 20.0,
