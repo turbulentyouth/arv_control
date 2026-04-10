@@ -210,6 +210,11 @@ component NeutralSwitch inherits Rectangle {
 }
 
 export component RightSidebar inherits Rectangle {
+    in property <bool> blocked: false;
+    callback shutter-clicked(int);
+    in-out property <bool> is-recording: false;
+    in-out property <int> camera-mode: 0;
+
     // 基础样式
     background: #2b3b4b;
     border-radius: 12px;
@@ -219,7 +224,6 @@ export component RightSidebar inherits Rectangle {
     height: layout.preferred-height;
     
     // 状态属性
-    property <int> camera-mode: 0; 
     property <bool> sonar-enabled: false;
     property <bool> dvl-enabled: false;
     property <bool> sub-cam-enabled: false;
@@ -227,13 +231,14 @@ export component RightSidebar inherits Rectangle {
 
     // 悬停逻辑
     out property <bool> is-hovering: 
-        side-touch.has-hover || 
+        root.blocked ? false :
+        (side-touch.has-hover || 
         mode-switch.has-hover ||
         shutter-btn.has-hover ||
         sonar-sw.has-hover ||
         dvl-sw.has-hover ||
         sub-cam-sw.has-hover ||
-        swap-cam-sw.has-hover;
+        swap-cam-sw.has-hover);
 
     // 侧边感应区域 (扩展到组件左侧以检测鼠标接近)
     side-touch := TouchArea {
@@ -264,8 +269,9 @@ export component RightSidebar inherits Rectangle {
             HorizontalLayout {
                 alignment: center;
                 shutter-btn := ShutterButton {
+                    active: root.is-recording && root.camera-mode == 0;
                     clicked => {
-                        debug("Shutter clicked! Mode:", root.camera-mode);
+                        root.shutter-clicked(root.camera-mode);
                     }
                 }
             }
@@ -303,5 +309,12 @@ export component RightSidebar inherits Rectangle {
                 checked <=> root.swap-cam-enabled;
             }
         }
+    }
+    TouchArea {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        enabled: root.blocked;
     }
 }

@@ -1,4 +1,4 @@
-import { Button, VerticalBox, HorizontalBox } from "std-widgets.slint";
+import { Button, Slider, LineEdit, ComboBox, CheckBox } from "std-widgets.slint";
 import { TopRuler } from "./components/top_ruler.slint";
 import { LeftSidebar } from "./components/left_sidebar.slint";
 import { RightSidebar } from "./components/right_sidebar.slint";
@@ -22,29 +22,78 @@ export component AppWindow inherits Window {
     in-out property <string> battery-text: "N/A";
     in-out property <string> mode-text: "MANUAL";
     in-out property <string> armed-text: "锁定";
+    in-out property <float> throttle-limit-percent: 20;
+    in-out property <bool> keyboard-enabled: true;
+    in-out property <string> photo-save-path: "";
+    in-out property <string> video-save-path: "";
+    in-out property <string> rov-ip: "192.168.137.2";
+    in-out property <int> video-source-index: 0;
+    in-out property <string> video-stream-url: "rtsp://192.168.137.2:8554/video";
+    in-out property <string> version-text: "0.1.0";
+    in-out property <bool> is-recording: false;
+    in-out property <int> camera-mode: 0;
+
+    // Notification
+    in-out property <string> notification-text: "";
+    in-out property <bool> notification-visible: false;
+    in-out property <bool> notification-success: true;
+    in-out property <int> notif-tick: 0;
+
+    // Recording timer
+    in-out property <int> rec-seconds: 0;
 
     callback heading-updated(float);
     callback key-event(string, bool);
     callback task-clicked;
+    callback throttle-limit-changed(float);
+    callback shutter-clicked(int);
+    callback keyboard-enabled-toggled(bool);
+    callback apply-video-settings;
 
     public function scroll-to-heading(target: float) {
         top-ruler.scroll-to-heading(target);
+    }
+
+    // Recording duration timer
+    Timer {
+        interval: 1s;
+        running: root.is-recording;
+        triggered => { root.rec-seconds += 1; }
+    }
+
+    // Notification auto-dismiss timer
+    Timer {
+        interval: 100ms;
+        running: root.notification-visible;
+        triggered => {
+            root.notif-tick += 1;
+            if (root.notif-tick >= 25) {
+                root.notification-visible = false;
+                root.notif-tick = 0;
+            }
+        }
     }
 
     // Main Viewport Area (Full Screen)
     main-focus-scope := FocusScope {
         width: 100%;
         height: 100%;
-        // Grab focus by default so keyboard events work immediately
-        // focus: true; // Removed as it caused compile error
 
         key-pressed(event) => {
-            root.key-event(event.text, true);
-            accept
+            if (settings-open || !root.keyboard-enabled) {
+                accept
+            } else {
+                root.key-event(event.text, true);
+                accept
+            }
         }
         key-released(event) => {
-            root.key-event(event.text, false);
-            accept
+            if (settings-open || !root.keyboard-enabled) {
+                accept
+            } else {
+                root.key-event(event.text, false);
+                accept
+            }
         }
 
         // Ensure clicking the background grabs focus
@@ -59,14 +108,13 @@ export component AppWindow inherits Window {
         Rectangle {
             width: 100%;
             height: 100%;
-            background: #1e1e1e; // Main Camera Placeholder
+            background: #1e1e1e;
 
         // Center Logo (Background Layer)
         VerticalLayout {
             alignment: center;
             spacing: 10px;
             
-            // Stylized Logo (Text representation)
             Text {
                 text: "< X >"; 
                 font-size: 80px;
@@ -87,11 +135,7 @@ export component AppWindow inherits Window {
             width: 100%;
             height: 100%;
             source: root.video-frame;
-            image-fit: contain; // Changed to cover or contain? User said "expand video range".
-                                // If contain, we might see black bars if aspect ratio differs.
-                                // If we want to fill the window, maybe "cover"? 
-                                // But usually for ROV control, seeing the whole image is critical. "contain" is safer.
-                                // But since the container is now full window, "contain" will use max available space.
+            image-fit: contain;
         }
     }
     
@@ -106,7 +150,7 @@ export component AppWindow inherits Window {
     }
 
     // Bottom Status Bar (Overlay)
-    BottomStatusBar {
+    bottom := BottomStatusBar {
         y: parent.height - self.height;
         width: 100%;
         throttle: root.throttle-text;
@@ -122,6 +166,8 @@ export component AppWindow inherits Window {
     LeftSidebar {
         y: (parent.height - self.height) / 2;
         task-clicked => { root.task-clicked(); }
+        setting-clicked => { settings-open = !settings-open; }
+        blocked: settings-open;
     }
 
     // Right Sidebar Controls (Overlay)
@@ -129,6 +175,238 @@ export component AppWindow inherits Window {
         y: (parent.height - self.height) / 2;
         x: self.is-hovering ? parent.width - self.width - 12px : parent.width - 10px;
         animate x { duration: 250ms; easing: ease-in-out; }
+        blocked: settings-open;
+        is-recording: root.is-recording;
+        camera-mode <=> root.camera-mode;
+        shutter-clicked(mode) => { root.shutter-clicked(mode); }
+    }
+
+    property <bool> settings-open: false;
+
+    Rectangle {
+        x: settings-open ? 0px : -self.width;
+        y: top-ruler.height;
+        width: 100%;
+        height: parent.height - top-ruler.height - bottom.height;
+        background: #1e2d3d;
+        animate x { duration: 250ms; easing: ease-in-out; }
+
+        TouchArea { width: 100%; height: 100%; }
+
+        // Header bar
+        Rectangle {
+            x: 0;
+            y: 0;
+            width: 100%;
+            height: 56px;
+            background: #2b3b4b;
+
+            Button {
+                x: 20px;
+                y: (parent.height - self.height) / 2;
+                text: "← 返回";
+                clicked => { settings-open = false; }
+            }
+
+            Text {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                text: "设置";
+                color: white;
+                font-size: 22px;
+                font-weight: 700;
+            }
+
+            // 应用按钮（右上角）
+            Rectangle {
+                x: parent.width - self.width - 20px;
+                y: (parent.height - self.height) / 2;
+                width: apply-btn.preferred-width + 32px;
+                height: 36px;
+                border-radius: 8px;
+                background: #1a7fcc;
+
+                apply-btn := Text {
+                    x: 16px;
+                    y: (parent.height - self.height) / 2;
+                    text: "应用设置";
+                    color: white;
+                    font-size: 14px;
+                    font-weight: 700;
+                }
+
+                TouchArea {
+                    width: 100%;
+                    height: 100%;
+                    clicked => { root.apply-video-settings(); }
+                }
+            }
+        }
+
+        // Content
+        VerticalLayout {
+            width: 60%;
+            x: (parent.width - self.width) / 2;
+            y: 76px;
+            spacing: 18px;
+
+            // ── 连接设置 ──
+            Text {
+                text: "连接设置";
+                color: #88aacc;
+                font-size: 16px;
+                font-weight: 700;
+            }
+
+            HorizontalLayout {
+                spacing: 12px;
+                Text { text: "ROV IP 地址"; color: #ccddee; font-size: 14px; width: 100px; vertical-alignment: center; }
+                LineEdit { text <=> root.rov-ip; placeholder-text: "例: 192.168.137.2"; }
+            }
+
+            HorizontalLayout {
+                spacing: 12px;
+                Text { text: "视频源"; color: #ccddee; font-size: 14px; width: 100px; vertical-alignment: center; }
+                ComboBox {
+                    model: ["RTSP", "摄像头"];
+                    current-index <=> root.video-source-index;
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 12px;
+                Text { text: "视频流路径"; color: #ccddee; font-size: 14px; width: 100px; vertical-alignment: center; }
+                LineEdit {
+                    text <=> root.video-stream-url;
+                    placeholder-text: root.video-source-index == 0
+                        ? "例: rtsp://192.168.137.2:8554/video"
+                        : "摄像头设备名（留空使用默认）";
+                }
+            }
+
+            Rectangle { height: 1px; background: #3a4a5a; }
+
+            // ── 控制设置 ──
+            Text {
+                text: "控制设置";
+                color: #88aacc;
+                font-size: 16px;
+                font-weight: 700;
+            }
+
+            HorizontalLayout {
+                spacing: 12px;
+                Text { text: "键盘控制"; color: #ccddee; font-size: 14px; width: 100px; vertical-alignment: center; }
+                CheckBox {
+                    text: "启用";
+                    checked <=> root.keyboard-enabled;
+                    toggled => { root.keyboard-enabled-toggled(root.keyboard-enabled); }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 12px;
+                Text { text: "油门上限"; color: #ccddee; font-size: 14px; width: 100px; vertical-alignment: center; }
+                Slider {
+                    value <=> root.throttle-limit-percent;
+                    minimum: 0;
+                    maximum: 100;
+                    changed => { root.throttle-limit-changed(root.throttle-limit-percent); }
+                }
+                Text {
+                    text: "\{round(root.throttle-limit-percent)}%";
+                    color: white;
+                    font-size: 14px;
+                    font-weight: 700;
+                    width: 40px;
+                }
+            }
+
+            Rectangle { height: 1px; background: #3a4a5a; }
+
+            // ── 存储设置 ──
+            Text {
+                text: "存储设置";
+                color: #88aacc;
+                font-size: 16px;
+                font-weight: 700;
+            }
+
+            HorizontalLayout {
+                spacing: 12px;
+                Text { text: "照片路径"; color: #ccddee; font-size: 14px; width: 100px; vertical-alignment: center; }
+                LineEdit { text <=> root.photo-save-path; placeholder-text: "系统图片文件夹/arv_control"; }
+            }
+
+            HorizontalLayout {
+                spacing: 12px;
+                Text { text: "视频路径"; color: #ccddee; font-size: 14px; width: 100px; vertical-alignment: center; }
+                LineEdit { text <=> root.video-save-path; placeholder-text: "系统视频文件夹/arv_control"; }
+            }
+
+            Rectangle { height: 1px; background: #3a4a5a; }
+
+            // 版本号
+            Text {
+                text: "版本 v" + root.version-text;
+                color: #667788;
+                font-size: 12px;
+                horizontal-alignment: center;
+            }
+        }
+    }
+
+    // Recording indicator (top-right overlay)
+    if root.is-recording : Rectangle {
+        x: parent.width - self.width - 20px;
+        y: 70px;
+        width: rec-inner.preferred-width + 32px;
+        height: 32px;
+        border-radius: 16px;
+        background: #cc000088;
+
+        rec-inner := HorizontalLayout {
+            padding-left: 12px;
+            padding-right: 12px;
+            spacing: 8px;
+            alignment: center;
+
+            Rectangle {
+                width: 10px;
+                height: 10px;
+                border-radius: 5px;
+                background: #ff3333;
+            }
+
+            Text {
+                property <int> m: root.rec-seconds / 60;
+                property <int> s: root.rec-seconds - self.m * 60;
+                text: "REC  \{self.m}:" + (self.s < 10 ? "0\{self.s}" : "\{self.s}");
+                color: white;
+                font-size: 13px;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    // Notification toast (top-center overlay)
+    if root.notification-visible : Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: 70px;
+        width: notif-t.preferred-width + 40px;
+        height: 36px;
+        border-radius: 18px;
+        background: root.notification-success ? #2d8c3dcc : #cc3333cc;
+
+        notif-t := Text {
+            x: 20px;
+            y: (parent.height - self.height) / 2;
+            text: root.notification-text;
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+        }
     }
   }
 }
