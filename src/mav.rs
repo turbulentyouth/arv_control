@@ -1,11 +1,13 @@
-use crate::AppWindow;
 use crate::input::InputState;
+use crate::AppWindow;
+use mavlink::ardupilotmega::{
+    MavCmd, MavMessage, MavModeFlag, COMMAND_LONG_DATA, RC_CHANNELS_OVERRIDE_DATA,
+};
+use mavlink::MavConnection;
+use slint::Weak;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use slint::Weak;
-use mavlink::ardupilotmega::{MavMessage, MavModeFlag, MavCmd, COMMAND_LONG_DATA, RC_CHANNELS_OVERRIDE_DATA};
-use mavlink::MavConnection;
 
 pub type MavConn = Arc<Box<dyn MavConnection<MavMessage> + Send + Sync>>;
 
@@ -52,16 +54,36 @@ pub fn run_control_loop(mav_state: MavState, input: Arc<Mutex<InputState>>) {
             let mut r: u16 = 1500;
             let mut chan7: u16 = 1500;
             let amp = (s.power_percent as i32) * 4;
-            if s.w { x = (1500 + amp) as u16; }
-            if s.s { x = (1500 - amp) as u16; }
-            if s.j { y = (1500 - amp) as u16; }
-            if s.l { y = (1500 + amp) as u16; }
-            if s.i { z = (1500 + amp) as u16; }
-            if s.k { z = (1500 - amp) as u16; }
-            if s.a { r = (1500 - amp) as u16; }
-            if s.d { r = (1500 + amp) as u16; }
-            if s.gripper_open  { chan7 = 1900; }
-            if s.gripper_close { chan7 = 1100; }
+            if s.w {
+                x = (1500 + amp) as u16;
+            }
+            if s.s {
+                x = (1500 - amp) as u16;
+            }
+            if s.j {
+                y = (1500 - amp) as u16;
+            }
+            if s.l {
+                y = (1500 + amp) as u16;
+            }
+            if s.i {
+                z = (1500 + amp) as u16;
+            }
+            if s.k {
+                z = (1500 - amp) as u16;
+            }
+            if s.a {
+                r = (1500 - amp) as u16;
+            }
+            if s.d {
+                r = (1500 + amp) as u16;
+            }
+            if s.gripper_open {
+                chan7 = 1900;
+            }
+            if s.gripper_close {
+                chan7 = 1100;
+            }
             (x, y, z, r, chan7)
         };
 

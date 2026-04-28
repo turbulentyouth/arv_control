@@ -1,17 +1,17 @@
-mod input;
-mod video;
-mod mav;
 mod capture;
+mod input;
+mod mav;
 mod settings;
+mod video;
 
-use std::thread;
-use std::sync::{Arc, Mutex};
-use std::path::PathBuf;
-use std::mem;
-use crate::input::InputState;
 use crate::capture::{CaptureCommand, VideoSource};
+use crate::input::InputState;
 use crate::settings::AppSettings;
 use slint::{ComponentHandle, SharedPixelBuffer};
+use std::mem;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 slint::include_modules!();
 
@@ -71,7 +71,9 @@ fn main() -> Result<(), slint::PlatformError> {
     let ui_handle_video = ui.as_weak();
     let video_latest = latest_frame.clone();
     thread::spawn(move || {
-        if let Err(e) = video::run_video_player(ui_handle_video, capture_rx, initial_source, video_latest) {
+        if let Err(e) =
+            video::run_video_player(ui_handle_video, capture_rx, initial_source, video_latest)
+        {
             eprintln!("视频播放器致命错误: {}", e);
         }
     });
@@ -268,8 +270,12 @@ fn main() -> Result<(), slint::PlatformError> {
             let current_index = ui.get_video_source_index();
 
             let new_source = match current_index {
-                1 => VideoSource::Camera { device: current_url.clone() },
-                _ => VideoSource::Rtsp { url: current_url.clone() },
+                1 => VideoSource::Camera {
+                    device: current_url.clone(),
+                },
+                _ => VideoSource::Rtsp {
+                    url: current_url.clone(),
+                },
             };
             capture_tx_settings
                 .send(CaptureCommand::ChangeSource { source: new_source })
@@ -348,15 +354,18 @@ fn main() -> Result<(), slint::PlatformError> {
             move || {
                 if let Some(ui) = timer_ui.upgrade() {
                     let mut spare_guard = spare.lock().unwrap();
-                    let current_spare = mem::replace(&mut *spare_guard, SharedPixelBuffer::<slint::Rgb8Pixel>::new(1, 1));
-                    if let Some((frame, seq)) = timer_latest.swap(current_spare) {
-                        let mut last = timer_last_seq.lock().unwrap();
-                        if seq != *last {
-                            *last = seq;
+                    let current_spare = mem::replace(
+                        &mut *spare_guard,
+                        SharedPixelBuffer::<slint::Rgb8Pixel>::new(1, 1),
+                    );
+                    let last = *timer_last_seq.lock().unwrap();
+                    match timer_latest.swap_if_new(last, current_spare) {
+                        Ok((frame, seq)) => {
+                            *timer_last_seq.lock().unwrap() = seq;
                             ui.set_video_frame(slint::Image::from_rgb8(frame));
-                        } else {
-                            // seq 未变，把帧放回 spare 供下次使用
-                            *spare_guard = frame;
+                        }
+                        Err(returned_spare) => {
+                            *spare_guard = returned_spare;
                         }
                     }
                 }

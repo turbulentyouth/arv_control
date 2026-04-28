@@ -1,9 +1,8 @@
-use crate::AppWindow;
 use crate::capture::{CaptureCommand, VideoSource};
-use slint::{SharedPixelBuffer, Rgb8Pixel, Weak};
+use crate::AppWindow;
 use ffmpeg_next as ffmpeg;
+use slint::{Rgb8Pixel, SharedPixelBuffer, Weak};
 use std::borrow::Cow;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
@@ -12,32 +11,51 @@ use std::thread;
 /// 共享帧缓存：解码线程写入，UI 定时器读取
 /// 采用拉模型，彻底消除 invoke_from_event_loop 的队列积压
 pub struct LatestFrame {
-    buffer: Mutex<Option<SharedPixelBuffer<Rgb8Pixel>>>,
-    seq: AtomicU64,
+    slot: Mutex<FrameSlot>,
+}
+
+struct FrameSlot {
+    buffer: Option<SharedPixelBuffer<Rgb8Pixel>>,
+    seq: u64,
 }
 
 impl LatestFrame {
     pub fn new() -> Self {
         Self {
-            buffer: Mutex::new(None),
-            seq: AtomicU64::new(0),
+            slot: Mutex::new(FrameSlot {
+                buffer: None,
+                seq: 0,
+            }),
         }
     }
 
     /// 更新最新帧（解码线程调用）
-    pub fn update(&self, frame: SharedPixelBuffer<Rgb8Pixel>) {
-        let mut buf = self.buffer.lock().unwrap();
-        *buf = Some(frame);
-        self.seq.fetch_add(1, Ordering::Release);
+    /// 返回被替换的旧帧；如果 UI 来不及消费，这个旧帧可被解码线程复用。
+    pub fn update(
+        &self,
+        frame: SharedPixelBuffer<Rgb8Pixel>,
+    ) -> Option<SharedPixelBuffer<Rgb8Pixel>> {
+        let mut slot = self.slot.lock().unwrap();
+        slot.seq = slot.seq.wrapping_add(1);
+        slot.buffer.replace(frame)
     }
 
-    /// 交换最新帧（UI 线程调用）
-    /// 用 spare 缓冲区交换出最新帧，立即释放锁，避免 clone 拷贝
-    pub fn swap(&self, spare: SharedPixelBuffer<Rgb8Pixel>) -> Option<(SharedPixelBuffer<Rgb8Pixel>, u64)> {
-        let mut buf = self.buffer.lock().unwrap();
-        let seq = self.seq.load(Ordering::Acquire);
-        let old = buf.replace(spare);
-        old.map(|f| (f, seq))
+    /// 只在有新帧时交换（UI 线程调用）。
+    /// 没有新帧时把 spare 原样还给调用方，避免把 1x1 占位帧写入最新帧槽。
+    pub fn swap_if_new(
+        &self,
+        last_seen: u64,
+        spare: SharedPixelBuffer<Rgb8Pixel>,
+    ) -> Result<(SharedPixelBuffer<Rgb8Pixel>, u64), SharedPixelBuffer<Rgb8Pixel>> {
+        let mut slot = self.slot.lock().unwrap();
+        if slot.seq == last_seen {
+            return Err(spare);
+        }
+
+        match slot.buffer.replace(spare) {
+            Some(frame) => Ok((frame, slot.seq)),
+            None => Err(slot.buffer.take().unwrap()),
+        }
     }
 }
 
@@ -53,7 +71,9 @@ fn patch_jpeg_dimensions(data: &[u8], width: u16, height: u16) -> Option<Cow<'_,
             continue;
         }
         match data[i + 1] {
-            0xD8 | 0xD9 | 0xD0..=0xD7 | 0x01 => { i += 2; }
+            0xD8 | 0xD9 | 0xD0..=0xD7 | 0x01 => {
+                i += 2;
+            }
             0xC0 => {
                 if i + 8 < data.len() {
                     let existing_h = u16::from_be_bytes([data[i + 5], data[i + 6]]);
@@ -90,14 +110,22 @@ fn packet_from_slice(data: &[u8]) -> ffmpeg::Packet {
 
 // MJPEG 分辨率自动检测候选（宽幅优先，从大到小）
 const MJPEG_RES_CANDIDATES: &[(u16, u16)] = &[
-    (3840, 1080), (3840, 1088),
-    (2560, 720),  (2560, 736),  (2560, 960),
-    (1280, 480),  (1280, 496),
-    (1920, 1080), (1920, 1088),
-    (1280, 720),  (1280, 736),
-    (640,  480),
-    (4096, 1080), (4096, 1088),
-    (2048, 1080), (2048, 1088),
+    (3840, 1080),
+    (3840, 1088),
+    (2560, 720),
+    (2560, 736),
+    (2560, 960),
+    (1280, 480),
+    (1280, 496),
+    (1920, 1080),
+    (1920, 1088),
+    (1280, 720),
+    (1280, 736),
+    (640, 480),
+    (4096, 1080),
+    (4096, 1088),
+    (2048, 1080),
+    (2048, 1088),
     (3840, 2160),
     (4096, 2048),
 ];
@@ -239,8 +267,11 @@ fn open_input(
             opts.set("fflags", "nobuffer+discardcorrupt");
             opts.set("flags", "low_delay");
             opts.set("rtsp_transport", "udp");
-            opts.set("probesize", "1000000");
-            opts.set("analyzeduration", "500000");
+            opts.set("reorder_queue_size", "0");
+            opts.set("max_delay", "0");
+            opts.set("buffer_size", "65536");
+            opts.set("probesize", "32768");
+            opts.set("analyzeduration", "0");
             println!("Connecting to RTSP: {}", url);
             Ok(ffmpeg::format::input_with_dictionary(url, opts)?)
         }
@@ -271,9 +302,7 @@ fn open_input(
                 let ret = ffmpeg::ffi::avformat_find_stream_info(ps, std::ptr::null_mut());
                 if ret < 0 {
                     ffmpeg::ffi::avformat_close_input(&mut ps);
-                    return Err(
-                        format!("Failed to find stream info (error code {})", ret).into(),
-                    );
+                    return Err(format!("Failed to find stream info (error code {})", ret).into());
                 }
 
                 Ok(ffmpeg::format::context::Input::wrap(ps))
@@ -373,7 +402,11 @@ fn run_session(
     println!(
         "视频流已连接，编解码器: {:?}，解码路径: FFmpeg{}",
         codec_id,
-        if is_mjpeg { "（MJPEG SOF0 自动修补）" } else { "" }
+        if is_mjpeg {
+            "（MJPEG SOF0 自动修补）"
+        } else {
+            ""
+        }
     );
 
     // 复用 SharedPixelBuffer：只在分辨率变化时重新分配
@@ -477,7 +510,10 @@ fn run_session(
             }
 
             if !first_frame_logged {
-                println!("视频流首帧分辨率: {}x{}, 编解码器: {:?}", width, height, codec_id);
+                println!(
+                    "视频流首帧分辨率: {}x{}, 编解码器: {:?}",
+                    width, height, codec_id
+                );
                 first_frame_logged = true;
             }
 
@@ -520,7 +556,10 @@ fn run_session(
             let dst_linesize = width as usize * 3;
 
             // 复用 SharedPixelBuffer：仅在分辨率变化时重新分配
-            if pb.as_ref().is_none_or(|p| p.width() != width || p.height() != height) {
+            if pb
+                .as_ref()
+                .is_none_or(|p| p.width() != width || p.height() != height)
+            {
                 pb = Some(SharedPixelBuffer::<Rgb8Pixel>::new(width, height));
             }
             let buf = pb.as_mut().unwrap();
@@ -554,15 +593,21 @@ fn run_session(
                 }
             }
 
-            // 更新共享帧缓存（解码线程只需写入，不关心 UI 是否读取）
-            let frame_clone = buf.clone();
-            latest_frame.update(frame_clone);
+            // 更新共享帧缓存：把完成帧交给 UI，避免 clone 后下帧写入触发整帧 COW 拷贝。
+            let completed = pb.take().unwrap();
+            if let Some(recycled) = latest_frame.update(completed) {
+                if recycled.width() == width && recycled.height() == height {
+                    pb = Some(recycled);
+                }
+            }
         }
 
         // MJPEG 回退：原包解码失败时，修补 SOF0 后重试
         if !received && is_mjpeg {
             if let Some(ref data) = mjpeg_data {
-                if let Some(patched_frame) = try_mjpeg_candidates(&mut decoder, data, &mut mjpeg_dim_hint) {
+                if let Some(patched_frame) =
+                    try_mjpeg_candidates(&mut decoder, data, &mut mjpeg_dim_hint)
+                {
                     let width = patched_frame.width();
                     let height = patched_frame.height();
                     let fmt = patched_frame.format();
@@ -614,7 +659,10 @@ fn run_session(
                     let src_linesize = rgb_frame.stride(0);
                     let dst_linesize = width as usize * 3;
 
-                    if pb.as_ref().is_none_or(|p| p.width() != width || p.height() != height) {
+                    if pb
+                        .as_ref()
+                        .is_none_or(|p| p.width() != width || p.height() != height)
+                    {
                         pb = Some(SharedPixelBuffer::<Rgb8Pixel>::new(width, height));
                     }
                     let buf = pb.as_mut().unwrap();
@@ -634,16 +682,21 @@ fn run_session(
                                 if src_start + dst_linesize <= src_data.len()
                                     && dst_start + dst_linesize <= dst.len()
                                 {
-                                    dst[dst_start..dst_start + dst_linesize]
-                                        .copy_from_slice(&src_data[src_start..src_start + dst_linesize]);
+                                    dst[dst_start..dst_start + dst_linesize].copy_from_slice(
+                                        &src_data[src_start..src_start + dst_linesize],
+                                    );
                                 }
                             }
                         }
                     }
 
-                    // 更新共享帧缓存
-                    let frame_clone = buf.clone();
-                    latest_frame.update(frame_clone);
+                    // 更新共享帧缓存：把完成帧交给 UI，避免 clone 后下帧写入触发整帧 COW 拷贝。
+                    let completed = pb.take().unwrap();
+                    if let Some(recycled) = latest_frame.update(completed) {
+                        if recycled.width() == width && recycled.height() == height {
+                            pb = Some(recycled);
+                        }
+                    }
                 }
             }
         }
