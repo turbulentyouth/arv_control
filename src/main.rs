@@ -305,7 +305,10 @@ fn main() -> Result<(), slint::PlatformError> {
                     photo_save_path: ui.get_photo_save_path().to_string(),
                     video_save_path: ui.get_video_save_path().to_string(),
                 };
-                settings::save(&s);
+                let s = s.clone();
+                std::thread::spawn(move || {
+                    settings::save(&s);
+                });
             },
         );
         std::mem::forget(timer);
