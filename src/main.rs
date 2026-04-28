@@ -7,10 +7,11 @@ mod settings;
 use std::thread;
 use std::sync::{Arc, Mutex};
 use std::path::PathBuf;
+use std::mem;
 use crate::input::InputState;
 use crate::capture::{CaptureCommand, VideoSource};
 use crate::settings::AppSettings;
-use slint::ComponentHandle;
+use slint::{ComponentHandle, SharedPixelBuffer};
 
 slint::include_modules!();
 
@@ -53,6 +54,9 @@ fn main() -> Result<(), slint::PlatformError> {
     ui.set_photo_save_path(photo_path.into());
     ui.set_video_save_path(video_path.into());
 
+    // ── 共享帧缓存（拉模型）──
+    let latest_frame = Arc::new(video::LatestFrame::new());
+
     let (capture_tx, capture_rx) = capture::channel();
 
     // 从（已更新的）UI 读取初始视频源
@@ -65,8 +69,9 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // ── 视频播放线程（自动重连，支持运行时切换源）──
     let ui_handle_video = ui.as_weak();
+    let video_latest = latest_frame.clone();
     thread::spawn(move || {
-        if let Err(e) = video::run_video_player(ui_handle_video, capture_rx, initial_source) {
+        if let Err(e) = video::run_video_player(ui_handle_video, capture_rx, initial_source, video_latest) {
             eprintln!("视频播放器致命错误: {}", e);
         }
     });
@@ -320,6 +325,45 @@ fn main() -> Result<(), slint::PlatformError> {
         ui.window().set_maximized(true);
     })
     .unwrap();
+
+    // ── 视频帧拉取定时器（60Hz，在主线程）──
+    let timer_latest = latest_frame.clone();
+    let timer_ui = ui.as_weak();
+    let last_seq = Arc::new(std::sync::Mutex::new(0u64));
+    let timer_last_seq = last_seq.clone();
+    let timer = slint::Timer::default();
+
+    // 预备空帧作为回收缓冲区，用于 swap 交换
+    let spare = SharedPixelBuffer::<slint::Rgb8Pixel>::new(1, 1);
+    let spare = Arc::new(std::sync::Mutex::new(spare));
+
+    timer.start(
+        slint::TimerMode::Repeated,
+        std::time::Duration::from_millis(16),
+        {
+            let timer_latest = timer_latest.clone();
+            let timer_ui = timer_ui.clone();
+            let timer_last_seq = timer_last_seq.clone();
+            let spare = spare.clone();
+            move || {
+                if let Some(ui) = timer_ui.upgrade() {
+                    let mut spare_guard = spare.lock().unwrap();
+                    let current_spare = mem::replace(&mut *spare_guard, SharedPixelBuffer::<slint::Rgb8Pixel>::new(1, 1));
+                    if let Some((frame, seq)) = timer_latest.swap(current_spare) {
+                        let mut last = timer_last_seq.lock().unwrap();
+                        if seq != *last {
+                            *last = seq;
+                            ui.set_video_frame(slint::Image::from_rgb8(frame));
+                        } else {
+                            // seq 未变，把帧放回 spare 供下次使用
+                            *spare_guard = frame;
+                        }
+                    }
+                }
+            }
+        },
+    );
+    std::mem::forget(timer);
 
     ui.run()
 }

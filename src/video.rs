@@ -1,11 +1,45 @@
 use crate::AppWindow;
 use crate::capture::{CaptureCommand, VideoSource};
-use slint::{SharedPixelBuffer, Image, Rgb8Pixel, Weak};
+use slint::{SharedPixelBuffer, Rgb8Pixel, Weak};
 use ffmpeg_next as ffmpeg;
 use std::borrow::Cow;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
+
+// ── 共享最新帧缓存（拉模型） ────────────────────────────────────────────────────
+
+/// 共享帧缓存：解码线程写入，UI 定时器读取
+/// 采用拉模型，彻底消除 invoke_from_event_loop 的队列积压
+pub struct LatestFrame {
+    buffer: Mutex<Option<SharedPixelBuffer<Rgb8Pixel>>>,
+    seq: AtomicU64,
+}
+
+impl LatestFrame {
+    pub fn new() -> Self {
+        Self {
+            buffer: Mutex::new(None),
+            seq: AtomicU64::new(0),
+        }
+    }
+
+    /// 更新最新帧（解码线程调用）
+    pub fn update(&self, frame: SharedPixelBuffer<Rgb8Pixel>) {
+        let mut buf = self.buffer.lock().unwrap();
+        *buf = Some(frame);
+        self.seq.fetch_add(1, Ordering::Release);
+    }
+
+    /// 交换最新帧（UI 线程调用）
+    /// 用 spare 缓冲区交换出最新帧，立即释放锁，避免 clone 拷贝
+    pub fn swap(&self, spare: SharedPixelBuffer<Rgb8Pixel>) -> Option<(SharedPixelBuffer<Rgb8Pixel>, u64)> {
+        let mut buf = self.buffer.lock().unwrap();
+        let seq = self.seq.load(Ordering::Acquire);
+        let old = buf.replace(spare);
+        old.map(|f| (f, seq))
+    }
+}
 
 // ── MJPEG SOF0 补丁工具 ──────────────────────────────────────────────────────
 
@@ -204,7 +238,7 @@ fn open_input(
             let mut opts = ffmpeg::util::dictionary::Owned::new();
             opts.set("fflags", "nobuffer+discardcorrupt");
             opts.set("flags", "low_delay");
-            opts.set("rtsp_transport", "tcp");
+            opts.set("rtsp_transport", "udp");
             opts.set("probesize", "1000000");
             opts.set("analyzeduration", "500000");
             println!("Connecting to RTSP: {}", url);
@@ -271,13 +305,14 @@ pub fn run_video_player(
     ui_handle: Weak<AppWindow>,
     capture_rx: mpsc::Receiver<CaptureCommand>,
     initial_source: VideoSource,
+    latest_frame: Arc<LatestFrame>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     ffmpeg::init()?;
 
     let mut current_source = initial_source;
 
     loop {
-        match run_session(&ui_handle, &capture_rx, &current_source) {
+        match run_session(&ui_handle, &capture_rx, &current_source, &latest_frame) {
             // 收到 ChangeSource 命令，切换到新视频源
             Ok(Some(new_source)) => {
                 notify(&ui_handle, "正在切换视频源...", true);
@@ -302,6 +337,7 @@ fn run_session(
     ui_handle: &Weak<AppWindow>,
     capture_rx: &mpsc::Receiver<CaptureCommand>,
     source: &VideoSource,
+    latest_frame: &Arc<LatestFrame>,
 ) -> Result<Option<VideoSource>, Box<dyn std::error::Error>> {
     let mut ictx = open_input(source)?;
 
@@ -317,7 +353,19 @@ fn run_session(
     let is_mjpeg = codec_id == ffmpeg::codec::Id::MJPEG;
 
     // 统一路径：所有编解码器都走 FFmpeg 解码 + swscale
-    let ctx = ffmpeg::codec::context::Context::from_parameters(input.parameters())?;
+    let mut ctx = ffmpeg::codec::context::Context::from_parameters(input.parameters())?;
+
+    // 低延迟策略：
+    // 1. 设置 LOW_DELAY 标志以减少解码延迟
+    // 2. 单线程解码避免多线程帧重排延迟
+    unsafe {
+        let codec_ctx = ctx.as_mut_ptr();
+        if !codec_ctx.is_null() {
+            (*codec_ctx).flags |= ffmpeg::ffi::AV_CODEC_FLAG_LOW_DELAY as i32;
+            (*codec_ctx).thread_count = 1;
+        }
+    }
+
     let mut decoder = ctx.decoder().video()?;
     let mut scaler: Option<ffmpeg::software::scaling::context::Context> = None;
     let mut scaler_key: (ffmpeg::format::Pixel, u32, u32) = (ffmpeg::format::Pixel::None, 0, 0);
@@ -330,10 +378,6 @@ fn run_session(
 
     // 复用 SharedPixelBuffer：只在分辨率变化时重新分配
     let mut pb: Option<SharedPixelBuffer<Rgb8Pixel>> = None;
-    // 帧丢弃：UI 渲染中标记，防止 invoke_from_event_loop 队列积压
-    let rendering = Arc::new(AtomicBool::new(false));
-    // 帧推送频率控制：限制为 ~30 FPS 以减少 UI 线程压力
-    let mut last_push_time = std::time::Instant::now();
 
     // 录像异步写入通道
     let mut recorder_tx: Option<mpsc::Sender<ffmpeg::Packet>> = None;
@@ -438,15 +482,12 @@ fn run_session(
             }
 
             // swscale：按需重建
-            // A. 修复 swscaler 警告：将 YUVJ420P 转换为 YUV420P
-            let src_format = if fmt == ffmpeg::format::Pixel::YUVJ420P {
-                ffmpeg::format::Pixel::YUV420P
-            } else {
-                fmt
-            };
+            // A. 修复 swscaler 警告：设置正确的色彩范围
+            // 对于 MJPEG，解码后格式为 YUVJ420P，需要将颜色范围设置为 JPEG
+            let src_format = fmt;
             let key = (src_format, width, height);
             if scaler.is_none() || scaler_key != key {
-                scaler = Some(ffmpeg::software::scaling::context::Context::get(
+                let mut sc_ctx = ffmpeg::software::scaling::context::Context::get(
                     src_format,
                     width,
                     height,
@@ -454,7 +495,19 @@ fn run_session(
                     width,
                     height,
                     ffmpeg::software::scaling::flag::Flags::BILINEAR,
-                )?);
+                )?;
+
+                // 设置源色彩范围：MJPEG 使用 JPEG (full) 范围
+                if src_format == ffmpeg::format::Pixel::YUVJ420P {
+                    unsafe {
+                        let sc_ptr = sc_ctx.as_mut_ptr();
+                        if !sc_ptr.is_null() {
+                            (*sc_ptr).src_range = 1; // 1 = JPEG full range, 0 = MPEG limited range
+                        }
+                    }
+                }
+
+                scaler = Some(sc_ctx);
                 scaler_key = key;
             }
 
@@ -501,28 +554,9 @@ fn run_session(
                 }
             }
 
-            // B. 限制帧推送频率：控制为约 30 FPS (33ms)
-            let now = std::time::Instant::now();
-            if now.duration_since(last_push_time) < std::time::Duration::from_millis(33) {
-                continue;
-            }
-            // 帧丢弃：UI 仍在处理上一帧时跳过
-            if rendering.load(Ordering::Acquire) {
-                continue;
-            }
-            rendering.store(true, Ordering::Release);
-            last_push_time = now;
-
-            let pb_clone = buf.clone();
-            let ui_weak = ui_handle.clone();
-            let rendering_clone = rendering.clone();
-            slint::invoke_from_event_loop(move || {
-                if let Some(ui) = ui_weak.upgrade() {
-                    ui.set_video_frame(Image::from_rgb8(pb_clone));
-                }
-                rendering_clone.store(false, Ordering::Release);
-            })
-            .ok();
+            // 更新共享帧缓存（解码线程只需写入，不关心 UI 是否读取）
+            let frame_clone = buf.clone();
+            latest_frame.update(frame_clone);
         }
 
         // MJPEG 回退：原包解码失败时，修补 SOF0 后重试
@@ -543,15 +577,12 @@ fn run_session(
                     }
 
                     // swscale：按需重建
-                    // A. 修复 swscaler 警告：将 YUVJ420P 转换为 YUV420P
-                    let src_format = if fmt == ffmpeg::format::Pixel::YUVJ420P {
-                        ffmpeg::format::Pixel::YUV420P
-                    } else {
-                        fmt
-                    };
+                    // A. 修复 swscaler 警告：设置正确的色彩范围
+                    // 对于 MJPEG，解码后格式为 YUVJ420P，需要将颜色范围设置为 JPEG
+                    let src_format = fmt;
                     let key = (src_format, width, height);
                     if scaler.is_none() || scaler_key != key {
-                        scaler = Some(ffmpeg::software::scaling::context::Context::get(
+                        let mut sc_ctx = ffmpeg::software::scaling::context::Context::get(
                             src_format,
                             width,
                             height,
@@ -559,7 +590,19 @@ fn run_session(
                             width,
                             height,
                             ffmpeg::software::scaling::flag::Flags::BILINEAR,
-                        )?);
+                        )?;
+
+                        // 设置源色彩范围：MJPEG 使用 JPEG (full) 范围
+                        if src_format == ffmpeg::format::Pixel::YUVJ420P {
+                            unsafe {
+                                let sc_ptr = sc_ctx.as_mut_ptr();
+                                if !sc_ptr.is_null() {
+                                    (*sc_ptr).src_range = 1; // 1 = JPEG full range, 0 = MPEG limited range
+                                }
+                            }
+                        }
+
+                        scaler = Some(sc_ctx);
                         scaler_key = key;
                     }
 
@@ -598,28 +641,9 @@ fn run_session(
                         }
                     }
 
-                    // B. 限制帧推送频率：控制为约 30 FPS (33ms)
-                    let now = std::time::Instant::now();
-                    if now.duration_since(last_push_time) < std::time::Duration::from_millis(33) {
-                        continue;
-                    }
-                    // 帧丢弃：UI 仍在处理上一帧时跳过
-                    if rendering.load(Ordering::Acquire) {
-                        continue;
-                    }
-                    rendering.store(true, Ordering::Release);
-                    last_push_time = now;
-
-                    let pb_clone = buf.clone();
-                    let ui_weak = ui_handle.clone();
-                    let rendering_clone = rendering.clone();
-                    slint::invoke_from_event_loop(move || {
-                        if let Some(ui) = ui_weak.upgrade() {
-                            ui.set_video_frame(Image::from_rgb8(pb_clone));
-                        }
-                        rendering_clone.store(false, Ordering::Release);
-                    })
-                    .ok();
+                    // 更新共享帧缓存
+                    let frame_clone = buf.clone();
+                    latest_frame.update(frame_clone);
                 }
             }
         }

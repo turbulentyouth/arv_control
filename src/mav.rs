@@ -50,7 +50,7 @@ pub fn run_control_loop(mav_state: MavState, input: Arc<Mutex<InputState>>) {
             let mut y: u16 = 1500;
             let mut z: u16 = 1500;
             let mut r: u16 = 1500;
-            let mut chan7: u16 = 65535;
+            let mut chan7: u16 = 1500;
             let amp = (s.power_percent as i32) * 4;
             if s.w { x = (1500 + amp) as u16; }
             if s.s { x = (1500 - amp) as u16; }
