@@ -154,6 +154,8 @@ fn main() -> Result<(), slint::PlatformError> {
                 state.k = false;
                 state.j = false;
                 state.l = false;
+                state.gripper_open = false;
+                state.gripper_close = false;
             }
         });
     }
@@ -177,6 +179,8 @@ fn main() -> Result<(), slint::PlatformError> {
                 "k" => state.k = pressed,
                 "j" => state.j = pressed,
                 "l" => state.l = pressed,
+                "-" => state.gripper_open = pressed,
+                "=" => state.gripper_close = pressed,
                 " " if pressed => {
                     if let Some(ui) = ui_handle.upgrade() {
                         let text = ui.get_armed_text();

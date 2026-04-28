@@ -44,12 +44,13 @@ pub fn run_mavlink_connector(conn_str: String, mav_state: MavState) {
 pub fn run_control_loop(mav_state: MavState, input: Arc<Mutex<InputState>>) {
     loop {
         thread::sleep(Duration::from_millis(100)); // 10Hz
-        let (x, y, z, r) = {
+        let (x, y, z, r, chan7) = {
             let s = input.lock().unwrap();
             let mut x: u16 = 1500;
             let mut y: u16 = 1500;
             let mut z: u16 = 1500;
             let mut r: u16 = 1500;
+            let mut chan7: u16 = 65535;
             let amp = (s.power_percent as i32) * 4;
             if s.w { x = (1500 + amp) as u16; }
             if s.s { x = (1500 - amp) as u16; }
@@ -59,7 +60,9 @@ pub fn run_control_loop(mav_state: MavState, input: Arc<Mutex<InputState>>) {
             if s.k { z = (1500 - amp) as u16; }
             if s.a { r = (1500 - amp) as u16; }
             if s.d { r = (1500 + amp) as u16; }
-            (x, y, z, r)
+            if s.gripper_open  { chan7 = 1900; }
+            if s.gripper_close { chan7 = 1100; }
+            (x, y, z, r, chan7)
         };
 
         let msg = MavMessage::RC_CHANNELS_OVERRIDE(RC_CHANNELS_OVERRIDE_DATA {
@@ -69,7 +72,7 @@ pub fn run_control_loop(mav_state: MavState, input: Arc<Mutex<InputState>>) {
             chan4_raw: r,     // Yaw
             chan5_raw: x,     // Forward
             chan6_raw: y,     // Lateral
-            chan7_raw: 65535,
+            chan7_raw: chan7,
             chan8_raw: 65535,
             target_system: 1,
             target_component: 1,

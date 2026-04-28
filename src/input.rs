@@ -4,6 +4,8 @@ pub struct InputState {
     pub a: bool, pub d: bool,
     pub i: bool, pub k: bool,
     pub j: bool, pub l: bool,
+    pub gripper_open: bool,
+    pub gripper_close: bool,
     pub power_percent: u8,
 }
 
@@ -14,6 +16,8 @@ impl Default for InputState {
             a: false, d: false,
             i: false, k: false,
             j: false, l: false,
+            gripper_open: false,
+            gripper_close: false,
             power_percent: 20,
         }
     }
