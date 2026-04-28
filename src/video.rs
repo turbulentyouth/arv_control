@@ -332,6 +332,8 @@ fn run_session(
     let mut pb: Option<SharedPixelBuffer<Rgb8Pixel>> = None;
     // 帧丢弃：UI 渲染中标记，防止 invoke_from_event_loop 队列积压
     let rendering = Arc::new(AtomicBool::new(false));
+    // 帧推送频率控制：限制为 ~30 FPS 以减少 UI 线程压力
+    let mut last_push_time = std::time::Instant::now();
 
     // 录像异步写入通道
     let mut recorder_tx: Option<mpsc::Sender<ffmpeg::Packet>> = None;
@@ -436,10 +438,16 @@ fn run_session(
             }
 
             // swscale：按需重建
-            let key = (fmt, width, height);
+            // A. 修复 swscaler 警告：将 YUVJ420P 转换为 YUV420P
+            let src_format = if fmt == ffmpeg::format::Pixel::YUVJ420P {
+                ffmpeg::format::Pixel::YUV420P
+            } else {
+                fmt
+            };
+            let key = (src_format, width, height);
             if scaler.is_none() || scaler_key != key {
                 scaler = Some(ffmpeg::software::scaling::context::Context::get(
-                    fmt,
+                    src_format,
                     width,
                     height,
                     ffmpeg::format::Pixel::RGB24,
@@ -466,14 +474,22 @@ fn run_session(
 
             {
                 let dst = buf.make_mut_bytes();
-                for y in 0..height as usize {
-                    let src_start = y * src_linesize;
-                    let dst_start = y * dst_linesize;
-                    if src_start + dst_linesize <= src_data.len()
-                        && dst_start + dst_linesize <= dst.len()
-                    {
-                        dst[dst_start..dst_start + dst_linesize]
-                            .copy_from_slice(&src_data[src_start..src_start + dst_linesize]);
+                // C. 优化内存拷贝：如果步长相等，直接拷贝整个 buffer
+                if src_linesize == dst_linesize {
+                    let copy_size = dst_linesize * height as usize;
+                    if copy_size <= src_data.len() && copy_size <= dst.len() {
+                        dst[..copy_size].copy_from_slice(&src_data[..copy_size]);
+                    }
+                } else {
+                    for y in 0..height as usize {
+                        let src_start = y * src_linesize;
+                        let dst_start = y * dst_linesize;
+                        if src_start + dst_linesize <= src_data.len()
+                            && dst_start + dst_linesize <= dst.len()
+                        {
+                            dst[dst_start..dst_start + dst_linesize]
+                                .copy_from_slice(&src_data[src_start..src_start + dst_linesize]);
+                        }
                     }
                 }
 
@@ -485,11 +501,17 @@ fn run_session(
                 }
             }
 
+            // B. 限制帧推送频率：控制为约 30 FPS (33ms)
+            let now = std::time::Instant::now();
+            if now.duration_since(last_push_time) < std::time::Duration::from_millis(33) {
+                continue;
+            }
             // 帧丢弃：UI 仍在处理上一帧时跳过
             if rendering.load(Ordering::Acquire) {
                 continue;
             }
             rendering.store(true, Ordering::Release);
+            last_push_time = now;
 
             let pb_clone = buf.clone();
             let ui_weak = ui_handle.clone();
@@ -520,10 +542,17 @@ fn run_session(
                         first_frame_logged = true;
                     }
 
-                    let key = (fmt, width, height);
+                    // swscale：按需重建
+                    // A. 修复 swscaler 警告：将 YUVJ420P 转换为 YUV420P
+                    let src_format = if fmt == ffmpeg::format::Pixel::YUVJ420P {
+                        ffmpeg::format::Pixel::YUV420P
+                    } else {
+                        fmt
+                    };
+                    let key = (src_format, width, height);
                     if scaler.is_none() || scaler_key != key {
                         scaler = Some(ffmpeg::software::scaling::context::Context::get(
-                            fmt,
+                            src_format,
                             width,
                             height,
                             ffmpeg::format::Pixel::RGB24,
@@ -549,22 +578,37 @@ fn run_session(
 
                     {
                         let dst = buf.make_mut_bytes();
-                        for y in 0..height as usize {
-                            let src_start = y * src_linesize;
-                            let dst_start = y * dst_linesize;
-                            if src_start + dst_linesize <= src_data.len()
-                                && dst_start + dst_linesize <= dst.len()
-                            {
-                                dst[dst_start..dst_start + dst_linesize]
-                                    .copy_from_slice(&src_data[src_start..src_start + dst_linesize]);
+                        // C. 优化内存拷贝：如果步长相等，直接拷贝整个 buffer
+                        if src_linesize == dst_linesize {
+                            let copy_size = dst_linesize * height as usize;
+                            if copy_size <= src_data.len() && copy_size <= dst.len() {
+                                dst[..copy_size].copy_from_slice(&src_data[..copy_size]);
+                            }
+                        } else {
+                            for y in 0..height as usize {
+                                let src_start = y * src_linesize;
+                                let dst_start = y * dst_linesize;
+                                if src_start + dst_linesize <= src_data.len()
+                                    && dst_start + dst_linesize <= dst.len()
+                                {
+                                    dst[dst_start..dst_start + dst_linesize]
+                                        .copy_from_slice(&src_data[src_start..src_start + dst_linesize]);
+                                }
                             }
                         }
                     }
 
+                    // B. 限制帧推送频率：控制为约 30 FPS (33ms)
+                    let now = std::time::Instant::now();
+                    if now.duration_since(last_push_time) < std::time::Duration::from_millis(33) {
+                        continue;
+                    }
+                    // 帧丢弃：UI 仍在处理上一帧时跳过
                     if rendering.load(Ordering::Acquire) {
                         continue;
                     }
                     rendering.store(true, Ordering::Release);
+                    last_push_time = now;
 
                     let pb_clone = buf.clone();
                     let ui_weak = ui_handle.clone();
